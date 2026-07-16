@@ -1,0 +1,152 @@
+:root {
+  font-family: Arial, sans-serif;
+  color: #111;
+  background: #e7e7e7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 1080px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #333;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 12px 24px;
+  color: #fff;
+  background: #101010;
+  border-bottom: 4px solid #d5a500;
+}
+
+.header h1 {
+  margin: 0 auto 0 0;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+
+.header span {
+  font: bold 12px "Courier New", monospace;
+}
+
+.form-card {
+  margin: 24px;
+  padding: 20px;
+  border: 1px solid #222;
+}
+
+.form-card h2 {
+  margin: 0 0 20px;
+  font: bold 20px "Courier New", monospace;
+}
+
+fieldset {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid #222;
+}
+
+legend,
+label {
+  font: bold 11px "Courier New", monospace;
+  letter-spacing: 0.2px;
+}
+
+.grid {
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+}
+
+label {
+  display: grid;
+  gap: 5px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  padding: 9px;
+  font: 13px "Courier New", monospace;
+  background: #fff;
+  border: 1px solid #333;
+  border-radius: 0;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.process,
+.download-btn {
+  display: inline-block;
+  padding: 12px 24px;
+  color: #fff;
+  font: bold 12px "Courier New", monospace;
+  text-decoration: none;
+  cursor: pointer;
+  background: #111;
+  border: 1px solid #000;
+}
+
+.process:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.download-btn {
+  margin-left: 12px;
+  color: #000;
+  background: #d5a500;
+}
+
+.error {
+  padding: 10px;
+  color: #900;
+  font-family: "Courier New", monospace;
+  border: 1px solid #900;
+}
+
+details {
+  margin-top: 20px;
+  font: 12px "Courier New", monospace;
+}
+
+pre {
+  overflow: auto;
+  padding: 12px;
+  background: #eee;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wide {
+    grid-column: auto;
+  }
+
+  .header span {
+    display: none;
+  }
+
+  .download-btn {
+    display: block;
+    width: fit-content;
+    margin: 12px 0 0;
+  }
+}

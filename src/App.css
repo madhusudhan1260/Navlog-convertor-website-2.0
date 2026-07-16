@@ -1,0 +1,961 @@
+/* =========================================================
+   EFLIGHT AI
+   PREMIUM AVIATION UI
+   PART 1
+========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Inter',sans-serif;
+}
+
+html{
+    scroll-behavior:smooth;
+}
+
+body{
+
+    min-height:100vh;
+
+    background:
+    linear-gradient(
+        135deg,
+        #eef6ff 0%,
+        #f8fbff 40%,
+        #dbeafe 100%
+    );
+
+    color:#0f172a;
+
+}
+
+
+/* ================= HEADER ================= */
+
+.header{
+
+    height:80px;
+
+    width:100%;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:0 60px;
+
+    background:
+    linear-gradient(
+        90deg,
+        #0f172a,
+        #1e3a8a,
+        #0369a1
+    );
+
+    color:white;
+
+    position:sticky;
+
+    top:0;
+
+    z-index:100;
+
+    box-shadow:
+    0 8px 30px rgba(0,0,0,.25);
+
+}
+
+.header h1{
+
+    font-size:32px;
+
+    font-weight:800;
+
+    letter-spacing:1px;
+
+}
+
+.header div{
+
+    font-size:16px;
+
+    font-weight:600;
+
+}
+
+
+/* ================= MAIN CARD ================= */
+
+.form-card{
+
+    width:90%;
+
+    max-width:1400px;
+
+    margin:40px auto;
+
+    background:white;
+
+    border-radius:24px;
+
+    padding:45px;
+
+    box-shadow:
+    0 20px 60px rgba(15,23,42,.12);
+
+}
+
+.form-card h1{
+
+    font-size:34px;
+
+    font-weight:800;
+
+    color:#0f172a;
+
+    margin-bottom:10px;
+
+}
+
+.form-card h2{
+
+    margin-top:35px;
+
+    margin-bottom:18px;
+
+    color:#1d4ed8;
+
+    font-size:24px;
+
+}
+
+hr{
+
+    border:none;
+
+    height:2px;
+
+    background:#dbeafe;
+
+    margin:20px 0 35px;
+
+}
+/* =========================================================
+   INPUTS
+========================================================= */
+
+.grid1,
+.grid2,
+.grid3{
+
+    display:grid;
+
+    gap:22px;
+
+    margin-bottom:25px;
+
+}
+
+.grid1{
+
+    grid-template-columns:1fr;
+
+}
+
+.grid2{
+
+    grid-template-columns:repeat(2,1fr);
+
+}
+
+.grid3{
+
+    grid-template-columns:repeat(3,1fr);
+
+}
+
+
+/* ================= INPUT ================= */
+
+input,
+textarea,
+select{
+
+    width:100%;
+
+    padding:16px 20px;
+
+    border:2px solid #dbeafe;
+
+    border-radius:14px;
+
+    background:#ffffff;
+
+    color:#0f172a;
+
+    font-size:16px;
+
+    font-weight:500;
+
+    outline:none;
+
+    transition:.3s;
+
+}
+
+
+/* ================= PLACEHOLDER ================= */
+
+input::placeholder{
+
+    color:#64748b;
+
+    opacity:1;
+
+}
+
+textarea::placeholder{
+
+    color:#64748b;
+
+    opacity:1;
+
+}
+
+
+/* ================= FOCUS ================= */
+
+input:focus,
+textarea:focus,
+select:focus{
+
+    border-color:#2563eb;
+
+    box-shadow:
+
+    0 0 0 4px rgba(37,99,235,.12);
+
+}
+
+
+/* ================= TEXTAREA ================= */
+
+textarea{
+
+    min-height:180px;
+
+    resize:vertical;
+
+    line-height:1.6;
+
+}
+
+
+/* ================= SELECT ================= */
+
+select{
+
+    cursor:pointer;
+
+    background:white;
+
+}
+
+
+/* ================= LABELS ================= */
+
+.form-card h3{
+
+    margin-bottom:10px;
+
+    margin-top:20px;
+
+    color:#334155;
+
+    font-size:18px;
+
+    font-weight:700;
+
+}
+
+
+/* ================= URL INPUTS ================= */
+
+.grid1 input{
+
+    font-size:15px;
+
+    font-family:monospace;
+
+    background:#f8fbff;
+
+    border:2px solid #bfdbfe;
+
+}
+
+.grid1 input:focus{
+
+    background:white;
+
+}
+
+
+/* ================= RESPONSIVE ================= */
+
+@media(max-width:1000px){
+
+.grid3{
+
+grid-template-columns:1fr;
+
+}
+
+.grid2{
+
+grid-template-columns:1fr;
+
+}
+
+.form-card{
+
+padding:30px;
+
+}
+
+}
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.process{
+
+    width:100%;
+
+    padding:18px;
+
+    border:none;
+
+    border-radius:16px;
+
+    background:linear-gradient(
+        90deg,
+        #2563eb,
+        #1d4ed8
+    );
+
+    color:white;
+
+    font-size:18px;
+
+    font-weight:700;
+
+    cursor:pointer;
+
+    transition:.3s;
+
+    box-shadow:
+    0 12px 25px rgba(37,99,235,.30);
+
+}
+
+.process:hover{
+
+    transform:translateY(-3px);
+
+    box-shadow:
+    0 20px 40px rgba(37,99,235,.40);
+
+}
+
+.process:active{
+
+    transform:scale(.98);
+
+}
+
+.process:disabled{
+
+    cursor:not-allowed;
+
+    opacity:.6;
+
+}
+
+
+
+/* =========================================================
+   DOWNLOAD BUTTON
+========================================================= */
+
+.download-section{
+
+    display:flex;
+
+    justify-content:center;
+
+    margin-top:30px;
+
+}
+
+.download-btn{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:12px;
+
+    padding:16px 32px;
+
+    border-radius:14px;
+
+    background:#16a34a;
+
+    color:white;
+
+    text-decoration:none;
+
+    font-size:17px;
+
+    font-weight:700;
+
+    transition:.3s;
+
+    box-shadow:
+    0 12px 25px rgba(22,163,74,.25);
+
+}
+
+.download-btn:hover{
+
+    background:#15803d;
+
+    transform:translateY(-2px);
+
+}
+
+
+
+/* =========================================================
+   JSON VIEWER
+========================================================= */
+
+.json-box{
+
+    margin-top:25px;
+
+    padding:25px;
+
+    border-radius:16px;
+
+    background:#0f172a;
+
+    color:#e2e8f0;
+
+    overflow:auto;
+
+    max-height:600px;
+
+    font-size:14px;
+
+    line-height:1.7;
+
+    border:1px solid #334155;
+
+}
+
+
+
+/* =========================================================
+   CARD ANIMATION
+========================================================= */
+
+.form-card{
+
+    animation:fadeUp .7s ease;
+
+}
+
+@keyframes fadeUp{
+
+    from{
+
+        opacity:0;
+
+        transform:translateY(30px);
+
+    }
+
+    to{
+
+        opacity:1;
+
+        transform:translateY(0);
+
+    }
+
+}
+
+
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+::-webkit-scrollbar{
+
+    width:10px;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+    background:#94a3b8;
+
+    border-radius:20px;
+
+}
+
+::-webkit-scrollbar-thumb:hover{
+
+    background:#64748b;
+
+}
+
+::-webkit-scrollbar-track{
+
+    background:#f1f5f9;
+
+}
+/* =========================================================
+   PREMIUM HEADER
+========================================================= */
+
+.header{
+
+    position:sticky;
+
+    top:0;
+
+    z-index:999;
+
+    backdrop-filter:blur(20px);
+
+}
+
+.header h1{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+    color:white;
+
+}
+
+.header div{
+
+    transition:.3s;
+
+    cursor:pointer;
+
+}
+
+.header div:hover{
+
+    color:#7dd3fc;
+
+}
+
+
+/* =========================================================
+   SECTION TITLES
+========================================================= */
+
+.form-card h2{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    padding-bottom:10px;
+
+    border-bottom:2px solid #dbeafe;
+
+}
+
+.form-card h2::before{
+
+    content:"✈";
+
+    font-size:22px;
+
+}
+
+
+/* =========================================================
+   INPUT ICON EFFECT
+========================================================= */
+
+input:hover,
+textarea:hover,
+select:hover{
+
+    border-color:#60a5fa;
+
+}
+
+input:focus,
+textarea:focus,
+select:focus{
+
+    transform:translateY(-2px);
+
+}
+
+
+/* =========================================================
+   URL INPUT STYLE
+========================================================= */
+
+.grid1 input{
+
+    height:60px;
+
+    font-size:15px;
+
+    border-radius:16px;
+
+    background:#eff6ff;
+
+    border:2px solid #93c5fd;
+
+}
+
+.grid1 input::placeholder{
+
+    color:#475569;
+
+    font-family:Inter,sans-serif;
+
+}
+
+
+/* =========================================================
+   FORM SPACING
+========================================================= */
+
+.form-card{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:18px;
+
+}
+
+.grid2,
+.grid3{
+
+    margin-bottom:10px;
+
+}
+
+
+/* =========================================================
+   DIVIDER
+========================================================= */
+
+hr{
+
+    margin-bottom:25px;
+
+}
+
+
+/* =========================================================
+   PAGE ANIMATION
+========================================================= */
+
+body{
+
+    animation:pageLoad .5s ease;
+
+}
+
+@keyframes pageLoad{
+
+    from{
+
+        opacity:0;
+
+        transform:translateY(20px);
+
+    }
+
+    to{
+
+        opacity:1;
+
+        transform:translateY(0);
+
+    }
+
+}
+/* =========================================================
+   PREMIUM GLASS EFFECTS
+========================================================= */
+
+.form-card{
+
+    position:relative;
+
+    overflow:hidden;
+
+}
+
+.form-card::before{
+
+    content:"";
+
+    position:absolute;
+
+    top:-120px;
+
+    right:-120px;
+
+    width:260px;
+
+    height:260px;
+
+    border-radius:50%;
+
+    background:rgba(37,99,235,.08);
+
+    filter:blur(40px);
+
+}
+
+.form-card::after{
+
+    content:"";
+
+    position:absolute;
+
+    bottom:-100px;
+
+    left:-100px;
+
+    width:220px;
+
+    height:220px;
+
+    border-radius:50%;
+
+    background:rgba(6,182,212,.08);
+
+    filter:blur(40px);
+
+}
+
+
+/* =========================================================
+   INPUT ANIMATION
+========================================================= */
+
+input,
+textarea,
+select{
+
+    transition:
+    all .35s ease;
+
+}
+
+input:hover,
+textarea:hover,
+select:hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:
+    0 12px 30px rgba(37,99,235,.12);
+
+}
+
+input:focus,
+textarea:focus,
+select:focus{
+
+    transform:translateY(-4px);
+
+}
+
+
+/* =========================================================
+   CARD SHADOW
+========================================================= */
+
+.form-card:hover{
+
+    box-shadow:
+    0 35px 80px rgba(15,23,42,.18);
+
+}
+
+
+/* =========================================================
+   DOWNLOAD CARD
+========================================================= */
+
+.download-section{
+
+    background:#eff6ff;
+
+    padding:25px;
+
+    border-radius:20px;
+
+    border:2px dashed #60a5fa;
+
+}
+
+
+/* =========================================================
+   JSON BOX
+========================================================= */
+
+.json-box{
+
+    border-radius:20px;
+
+    border:1px solid #334155;
+
+    box-shadow:
+    inset 0 0 20px rgba(255,255,255,.04);
+
+}
+
+
+/* =========================================================
+   BUTTON ANIMATION
+========================================================= */
+
+.process{
+
+    position:relative;
+
+    overflow:hidden;
+
+}
+
+.process::before{
+
+    content:"";
+
+    position:absolute;
+
+    left:-120%;
+
+    top:0;
+
+    width:70%;
+
+    height:100%;
+
+    background:
+
+    rgba(255,255,255,.25);
+
+    transform:skewX(-25deg);
+
+    transition:.7s;
+
+}
+
+.process:hover::before{
+
+    left:140%;
+
+}
+
+
+/* =========================================================
+   HEADER SHINE
+========================================================= */
+
+.header{
+
+    overflow:hidden;
+
+}
+
+.header::after{
+
+    content:"";
+
+    position:absolute;
+
+    top:0;
+
+    left:-220px;
+
+    width:160px;
+
+    height:100%;
+
+    background:
+
+    rgba(255,255,255,.18);
+
+    transform:skewX(-25deg);
+
+    animation:shine 7s infinite;
+
+}
+
+@keyframes shine{
+
+0%{
+
+left:-250px;
+
+}
+
+100%{
+
+left:120%;
+
+}
+
+}
+
+
+/* =========================================================
+   PAGE FOOTER
+========================================================= */
+
+.footer{
+
+    text-align:center;
+
+    padding:30px;
+
+    color:#64748b;
+
+    font-size:14px;
+
+}
