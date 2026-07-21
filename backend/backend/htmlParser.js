@@ -12,64 +12,285 @@ function clean(value) {
         .trim();
 }
 
+// Strip a trailing unit word ("lbs", "NM", "ft") off a numeric-looking value,
+// leaving just the number. Returns "" if the input is empty/blank.
+function stripUnit(value, unit) {
+    const v = clean(value);
+    if (!v) return "";
+    const regex = new RegExp("\\s*" + unit + "\\s*$", "i");
+    return clean(v.replace(regex, ""));
+}
+
+// Extract a bare number from a string. Returns "" if none found.
+function toNumber(value) {
+    const v = clean(value).replace(/,/g, "");
+    const match = v.match(/-?\d+(?:\.\d+)?/);
+    return match ? match[0] : "";
+}
+
+// ForeFlight renders top-level durations like "0h50m" / "1h02m".
+// Convert to the "H:MM" style used throughout the rest of the document.
+function toHoursMinutes(value) {
+    const v = clean(value);
+    const match = v.match(/(\d+)h(\d+)m/);
+    if (!match) return v;
+    return `${parseInt(match[1], 10)}:${match[2].padStart(2, "0")}`;
+}
+
 // =====================================================
 // INITIALIZE PREDICTABLE DATA STRUCT
 // =====================================================
 function emptyResult() {
     return {
-        header: "",
-        flightSummary: {
-            registration: "", flightLevel: "", date: "", departure: "",
-            destination: "", alternate: "", ETD: "", ETA: "", ETE: "",
-            distance: "", averageWind: "", averageWC: "", TAS: "", stepClimb: ""
+        title: "",
+        summary: {
+            pic: "", soulsOnBoard: "", tailRaw: "", registration: "", aircraftType: "",
+            profile: "", fuelFlow: "", distance: "", etd: "", ete: "", eta: "",
+            route: "", altitude: ""
         },
-        plannedProfile: "",
-        performance: {
-            registration: "", flightLevel: "", date: "", departure: "",
-            destination: "", alternate: "", ETD: "", ETA: "", ETE: "",
-            distance: "", averageWind: "", averageWC: "", TAS: "", stepClimb: "",
-            isa: "", gs: "", trueCourse: "", magneticCourse: ""
-        },
-        fuel: {
-            taxi: "", trip: "", contingency: "", alternate: "",
-            reserve: "", required: "", extra: "", takeoff: "", ramp: ""
-        },
-        weight: {
-            BOW: "", PAX: "", LOAD: "", ZFW: "", TOW: "", ELW: ""
+        fuelWeights: {
+            blockFuel: "", taxiFuel: "", flightFuel: "", reserveFuel: "", reserveMin: "",
+            alternateFuel: "", extraFuel: "", additional: "", payload: "",
+            zfw: "", tow: "", elw: ""
         },
         route: "",
         waypoints: [],
         airportInfo: [],
-        atcFlightPlan: {
-            aircraft: "", equipment: "", ssr: "", departure: "",
-            destination: "", alternate: "", route: "", remarks: ""
+        enrouteWinds: {
+            bands: [],
+            rows: []
         },
-        enrouteWinds: [],
-        alternates: [],
-        misc: {
-            isa: "", gs: "", trueCourse: "", magneticCourse: ""
-        }
+        flightInformationRegions: []
     };
 }
 
 // =====================================================
-// TEXT SEARCH VALUE LOOKUP (For unstructured text targets)
+// SUMMARY & TIMES TABLE  (table.summary-times)
+// Rows: PIC | Souls on board | Tail | Profile | Fuel Flow |
+//       Distance | ETD | ETE | ETA | Route | Altitude
 // =====================================================
-function extractTextLabelValue($, labels) {
-    let foundValue = "";
-    const targetLabels = (Array.isArray(labels) ? labels : [labels]).map(l => l.toUpperCase());
-    const bodyText = clean($("body").text());
+function parseSummaryTimes($, result) {
+    $("table.summary-times tr.table-data-row").each((_, tr) => {
+        const cells = [];
+        $(tr).find("td").each((_, td) => cells.push(clean($(td).text())));
+        if (cells.length < 2) return;
 
-    for (const label of targetLabels) {
-        const escaped = label.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const regex = new RegExp("(?:^|\\s)" + escaped + "\\s*[:\\-]?\\s*([^\\n\\r]{1,50})", "i");
-        const match = bodyText.match(regex);
-        if (match) {
-            foundValue = clean(match[1]);
-            break;
-        }
+        const label = cells[0].toLowerCase();
+        const value = cells[1];
+
+        if (label === "pic") result.summary.pic = value;
+        else if (label === "souls on board") result.summary.soulsOnBoard = value;
+        else if (label === "tail") result.summary.tailRaw = value;
+        else if (label === "profile") result.summary.profile = value;
+        else if (label === "fuel flow") result.summary.fuelFlow = value;
+        else if (label === "distance") result.summary.distance = value;
+        else if (label === "etd") result.summary.etd = value;
+        else if (label === "ete") result.summary.ete = toHoursMinutes(value);
+        else if (label === "eta") result.summary.eta = value;
+        else if (label === "route") result.summary.route = value;
+        else if (label === "altitude") result.summary.altitude = value;
+    });
+
+    // Tail looks like "VTCSP (C56X)" -> split registration / aircraft type
+    const tailMatch = result.summary.tailRaw.match(/^([A-Z0-9\-]+)\s*\(([^)]+)\)/i);
+    if (tailMatch) {
+        result.summary.registration = tailMatch[1];
+        result.summary.aircraftType = tailMatch[2];
+    } else if (result.summary.tailRaw) {
+        result.summary.registration = result.summary.tailRaw;
     }
-    return foundValue;
+}
+
+// =====================================================
+// FUEL & WEIGHTS TABLE  (table.fuel-weights)
+// Rows: Block Fuel | Taxi Fuel | Flight Fuel | Reserve Fuel (+Min) |
+//       Alternate Fuel | Extra Fuel | Additional | Payload | ZFW | TOW | ELW
+// =====================================================
+function parseFuelWeights($, result) {
+    $("table.fuel-weights tbody").each((_, tbody) => {
+        const tr = $(tbody).find("tr").first();
+        const labelTd = tr.find("td").first();
+        const valueTd = tr.find("td").eq(1);
+        if (!labelTd.length || !valueTd.length) return;
+
+        // Reserve Fuel row has a nested "Min: 625 lbs" span inside the label cell
+        const minSpan = labelTd.find("span.small");
+        const reserveMin = minSpan.length ? clean(minSpan.text()) : "";
+
+        const labelClone = labelTd.clone();
+        labelClone.find("span").remove();
+        const label = clean(labelClone.text()).toLowerCase();
+        const value = stripUnit(clean(valueTd.text()), "lbs");
+
+        if (label === "block fuel") result.fuelWeights.blockFuel = value;
+        else if (label === "taxi fuel") result.fuelWeights.taxiFuel = value;
+        else if (label === "flight fuel") result.fuelWeights.flightFuel = value;
+        else if (label === "reserve fuel") {
+            result.fuelWeights.reserveFuel = value;
+            result.fuelWeights.reserveMin = stripUnit(reserveMin.replace(/^min:?\s*/i, ""), "lbs");
+        }
+        else if (label === "alternate fuel") result.fuelWeights.alternateFuel = value;
+        else if (label === "extra fuel") result.fuelWeights.extraFuel = value;
+        else if (label === "additional") result.fuelWeights.additional = value;
+        else if (label === "payload") result.fuelWeights.payload = value;
+        else if (label === "zfw") result.fuelWeights.zfw = value;
+        else if (label === "tow") result.fuelWeights.tow = value;
+        else if (label === "elw") result.fuelWeights.elw = value;
+    });
+}
+
+// =====================================================
+// ROUTE  (section.route)
+// =====================================================
+function parseRoute($, result) {
+    const routeText = clean($("section.route div").first().text());
+    result.route = routeText || result.summary.route;
+}
+
+// =====================================================
+// WAYPOINT TABLE  (table.waypoint)
+// Verified 19-column layout (0-indexed):
+// 0 Waypoint | 1 Airway | 2 HDG | 3 CRS | 4 ALT | 5 CMP | 6 DIR/SPD |
+// 7 ISA | 8 TAS | 9 GS | 10 LEG(dist) | 11 REM(dist) | 12 USED(fuel) |
+// 13 REM(fuel) | 14 ACT(fuel) | 15 LEG(time) | 16 REM(time) | 17 ETE | 18 ACT(time/ATA)
+// =====================================================
+function parseWaypoints($, result) {
+    const waypoints = [];
+
+    $("table.waypoint tbody tr").each((_, tr) => {
+        const tds = $(tr).find("td");
+        if (tds.length < 19) return;
+
+        // Waypoint cell can contain a nav-aid subtitle in <span class="small">
+        const waypointTd = tds.eq(0).clone();
+        const subtitle = clean(waypointTd.find("span.small").text());
+        waypointTd.find("span").remove();
+        const waypointName = clean(waypointTd.text());
+
+        const cell = (i) => clean(tds.eq(i).text());
+
+        waypoints.push({
+            waypoint: waypointName,
+            waypointDetail: subtitle,
+            airway: cell(1),
+            heading: cell(2),
+            course: cell(3),
+            flightLevel: cell(4),
+            windComponent: cell(5),
+            windDirectionSpeed: cell(6),
+            isa: cell(7),
+            tas: cell(8),
+            gs: cell(9),
+            legDistance: cell(10),
+            remainingDistance: cell(11),
+            fuelUsed: cell(12),
+            fuelRemaining: cell(13),
+            actualFuel: cell(14),
+            legTime: cell(15),
+            remainingTime: cell(16),
+            ete: cell(17),
+            eta: "",
+            ata: cell(18)
+        });
+    });
+
+    result.waypoints = waypoints;
+}
+
+// =====================================================
+// AIRPORT INFORMATION  (table.airport-frequencies)
+// Columns: (DEP/DEST) | Airport | ETA | WX | TWR/CTAF | CLR | GND | ELEV | RWY | RWY LENGTH
+// =====================================================
+function parseAirportInfo($, result) {
+    const airports = [];
+
+    $("table.airport-frequencies tbody tr").each((_, tr) => {
+        const tds = $(tr).find("td");
+        if (tds.length < 10) return;
+
+        const cell = (i) => clean(tds.eq(i).text());
+
+        airports.push({
+            type: cell(0),
+            airport: cell(1),
+            eta: cell(2),
+            atis: cell(3),   // ForeFlight labels this column "WX" (weather freq)
+            tower: cell(4),
+            clearance: cell(5),
+            ground: cell(6),
+            elevation: cell(7),
+            runway: cell(8),
+            runwayLength: cell(9)
+        });
+    });
+
+    result.airportInfo = airports;
+}
+
+// =====================================================
+// ENROUTE WINDS  (table.winds-aloft)
+// Header row 1 gives dynamic altitude/FL bands (colspan=2 each).
+// Data rows: ident, then (wind, isa) pairs, one pair per band.
+// The bold "border-bottom" row is the block-fuel summary footer - skip it.
+// =====================================================
+function parseEnrouteWinds($, result) {
+    const table = $("table.winds-aloft").first();
+    if (!table.length) return;
+
+    const bands = [];
+    table.find("thead tr").first().find("th").each((i, th) => {
+        if (i === 0) return; // first th is the blank corner cell
+        const label = clean($(th).text());
+        if (label) bands.push(label);
+    });
+
+    const rows = [];
+    table.find("tbody tr").each((_, tr) => {
+        const rowClass = $(tr).attr("class") || "";
+        if (/bold/i.test(rowClass)) return; // footer summary row, not a waypoint
+
+        const tds = $(tr).find("td");
+        if (tds.length < 1) return;
+
+        const identifier = clean(tds.eq(0).text());
+        if (!identifier) return;
+
+        const values = [];
+        for (let i = 0; i < bands.length; i++) {
+            const windIdx = 1 + i * 2;
+            const isaIdx = 2 + i * 2;
+            values.push({
+                wind: tds.eq(windIdx).length ? clean(tds.eq(windIdx).text()) : "",
+                isa: tds.eq(isaIdx).length ? clean(tds.eq(isaIdx).text()) : ""
+            });
+        }
+
+        rows.push({ identifier, values });
+    });
+
+    result.enrouteWinds = { bands, rows };
+}
+
+// =====================================================
+// FLIGHT INFORMATION REGION  (table.flight-information-region)
+// =====================================================
+function parseFlightInformationRegions($, result) {
+    const regions = [];
+
+    $("table.flight-information-region tbody tr").each((_, tr) => {
+        const tds = $(tr).find("td");
+        if (tds.length < 5) return;
+
+        regions.push({
+            fir: clean(tds.eq(0).text()),
+            eet: clean(tds.eq(1).text()),
+            entry: clean(tds.eq(2).text()),
+            exit: clean(tds.eq(3).text()),
+            distance: clean(tds.eq(4).text())
+        });
+    });
+
+    result.flightInformationRegions = regions;
 }
 
 // =====================================================
@@ -81,268 +302,33 @@ function parseHTML(html) {
     const $ = cheerio.load(html);
     const result = emptyResult();
 
-    // 1️⃣ PARSE THE STRUCTURAL HEADER FOR META LOGS
-    const rawTitleText = clean($("title").text()) || clean($("h1").first().text()) || "";
-    result.header = rawTitleText || "ForeFlight Navlog";
+    result.title = clean($("title").text()) || "ForeFlight Navlog";
+
+    parseSummaryTimes($, result);
+    parseFuelWeights($, result);
+    parseRoute($, result);
+    parseWaypoints($, result);
+    parseAirportInfo($, result);
+    parseEnrouteWinds($, result);
+    parseFlightInformationRegions($, result);
+
+    // Derive departure/destination from the airport-frequencies table (most reliable),
+    // falling back to the first/last token of the route string.
+    const dep = result.airportInfo.find(a => a.type.toUpperCase() === "DEP");
+    const dest = result.airportInfo.find(a => a.type.toUpperCase() === "DEST");
+    result.departure = dep ? dep.airport : (result.route.split(" ")[0] || "");
+    result.destination = dest ? dest.airport : (result.route.split(" ").slice(-1)[0] || "");
 
     console.log("\n========================================");
-    console.log("FOREFLIGHT SPECIFIC PARSER RUNNING");
+    console.log("FOREFLIGHT PARSER SUMMARY");
     console.log("========================================");
-
-    if (rawTitleText) {
-        // Extract Departure & Destination: VABB — VOBG
-        const routeMatch = rawTitleText.match(/^([A-Z]{4})\s*[\u2014\-]\s*([A-Z]{4})/i);
-        if (routeMatch) {
-            result.performance.departure = routeMatch[1];
-            result.performance.destination = routeMatch[2];
-        }
-
-        // Extract Date: (Jul 16, 2026)
-        const dateMatch = rawTitleText.match(/\(([^)]+\d{4})\)/);
-        if (dateMatch) {
-            result.performance.date = dateMatch[1];
-        }
-
-        // Extract Registration: in VTBNB
-        const regMatch = rawTitleText.match(/in\s+([A-Z0-9\-]+)/i);
-        if (regMatch) {
-            result.performance.registration = regMatch[1];
-        }
-
-        // Extract Aircraft Type: (PRM1)
-        const acMatch = rawTitleText.match(/\b([A-Z0-9]{4})\b(?!\s*IFR|\s*VFR)/i) || rawTitleText.match(/\(([A-Z0-9]{3,4})\)/g);
-        if (acMatch) {
-            // Pick the secondary matching parameter safely
-            const potentialType = Array.isArray(acMatch) ? acMatch[acMatch.length - 1] : acMatch[1];
-            result.atcFlightPlan.aircraft = potentialType.replace(/[()]/g, "").trim();
-        }
-    }
-
-    // =====================================================
-    // PERFORMANCE / TIME (Using verified native classes)
-    // =====================================================
-    result.performance.ETE         = clean($(".performance-metric.ete span").text() || $(".performance-metric.ete").text().replace(/ETE/i, ""));
-    result.performance.distance    = clean($(".performance-metric.distance span").text() || $(".performance-metric.distance").text().replace(/DIST/i, ""));
-    result.performance.averageWind = clean($(".performance-metric.avg-wind span").text() || $(".performance-metric.avg-wind").text().replace(/AVG WIND/i, ""));
-    result.performance.ETD         = clean($(".performance-metric.etd span").text() || $(".performance-metric.etd").text().replace(/ETD/i, ""));
-    result.performance.ETA         = clean($(".performance-metric.eta span").text() || $(".performance-metric.eta").text().replace(/ETA/i, ""));
-    result.performance.flightLevel = clean($(".performance-metric.fl span").text() || $(".performance-metric.flight-level span").text());
-    result.performance.averageWC   = clean($(".performance-metric.avg-wc span").text());
-    result.performance.TAS         = clean($(".performance-metric.tas span").text());
-    result.performance.stepClimb   = clean($(".performance-metric.step-climb span").text());
-
-    // Fallback lookups for missing layout blocks
-    if (!result.performance.flightLevel) result.performance.flightLevel = extractTextLabelValue($, ["FL", "Flight Level"]);
-    if (!result.performance.TAS) result.performance.TAS = extractTextLabelValue($, ["TAS"]);
-    if (!result.performance.stepClimb) result.performance.stepClimb = extractTextLabelValue($, ["STEP CLIMB", "Step Climb"]);
-    if (!result.performance.averageWC) result.performance.averageWC = extractTextLabelValue($, ["AVG WC", "Average WC"]);
-    
-    // Map Alternate
-    result.performance.alternate = extractTextLabelValue($, ["ALT1", "Alternate"]);
-
-    // Synchronize flightSummary clone layout directly
-    Object.keys(result.flightSummary).forEach(key => {
-        if (result.performance[key] !== undefined) {
-            result.flightSummary[key] = result.performance[key];
-        }
-    });
-
-    // =====================================================
-    // FUEL PARSER (Direct Target Matrix + Structural Text Fallback)
-    // =====================================================
-    result.fuel.ramp    = clean($(".performance-metric.block-fuel span").text() || $(".performance-metric.ramp-fuel span").text());
-    result.fuel.taxi    = clean($(".performance-metric.taxi-fuel span").text());
-    result.fuel.trip    = clean($(".performance-metric.flight-fuel span").text() || $(".performance-metric.trip-fuel span").text());
-    result.fuel.reserve = clean($(".performance-metric.reserve-fuel span").text());
-    
-    // Fallback extraction for classes missing from individual raw HTML schemas
-    if (!result.fuel.ramp) result.fuel.ramp = extractTextLabelValue($, ["Ramp Fuel", "Ramp", "Block Fuel"]);
-    if (!result.fuel.taxi) result.fuel.taxi = extractTextLabelValue($, ["Taxi Fuel", "Taxi"]);
-    if (!result.fuel.trip) result.fuel.trip = extractTextLabelValue($, ["Trip Fuel", "Flight Fuel", "Trip"]);
-    if (!result.fuel.reserve) result.fuel.reserve = extractTextLabelValue($, ["Reserve Fuel", "Final Reserve", "Reserve"]);
-    
-    result.fuel.contingency = extractTextLabelValue($, ["Contingency Fuel", "Contingency"]);
-    result.fuel.alternate   = extractTextLabelValue($, ["Alternate Fuel", "Alternate"]);
-    result.fuel.required    = extractTextLabelValue($, ["Required Fuel", "Required"]);
-    result.fuel.takeoff     = extractTextLabelValue($, ["Takeoff Fuel", "T/O Fuel", "Takeoff"]);
-    result.fuel.extra       = extractTextLabelValue($, ["Extra Fuel", "Extra"]);
-
-    // =====================================================
-    // WEIGHT PARSER (Direct Class Target Matrix)
-    // =====================================================
-    result.weight.TOW = clean($(".performance-metric.tow span").text() || $(".performance-metric.takeoff-weight span").text());
-    result.weight.ELW = clean($(".performance-metric.elw span").text() || $(".performance-metric.landing-weight span").text());
-    
-    if (!result.weight.TOW) result.weight.TOW = extractTextLabelValue($, ["TOW", "Takeoff Weight"]);
-    if (!result.weight.ELW) result.weight.ELW = extractTextLabelValue($, ["ELW", "Landing Weight", "Estimated Landing Weight"]);
-    
-    result.weight.BOW  = extractTextLabelValue($, ["BOW", "Basic Operating Weight"]);
-    result.weight.PAX  = extractTextLabelValue($, ["PAX", "Passengers"]);
-    result.weight.LOAD = extractTextLabelValue($, ["LOAD"]);
-    result.weight.ZFW  = extractTextLabelValue($, ["ZFW", "Zero Fuel Weight"]);
-
-    if (result.fuel.takeoff) result.weight["T/O Fuel"] = result.fuel.takeoff;
-
-    // =====================================================
-    // ROUTE PARSER (Section Selector Blueprint Match)
-    // =====================================================
-    result.route = clean($("section.route div").text());
-    if (!result.route) {
-        result.route = extractTextLabelValue($, ["ATC ROUTE", "PLANNED ROUTE", "ROUTE"]);
-    }
-    result.plannedProfile = result.route;
-
-    // Map ATC Base Block
-    result.atcFlightPlan = {
-        aircraft:    result.atcFlightPlan.aircraft || extractTextLabelValue($, ["Aircraft"]),
-        equipment:   extractTextLabelValue($, ["Equipment"]),
-        ssr:         extractTextLabelValue($, ["SSR"]),
-        departure:   result.performance.departure,
-        destination: result.performance.destination,
-        alternate:   result.performance.alternate,
-        route:       result.route,
-        remarks:     clean($(".atc-remarks, section.remarks div, .remarks-block").text()) || extractTextLabelValue($, ["RMK/", "RMK", "Remarks"])
-    };
-
-    // =====================================================
-    // 2️⃣ WAYPOINT PARSER (Fixed Class & 19-Column Index Matrix)
-    // =====================================================
-    const targetWaypoints = [];
-    $("table.waypoint, .waypoint-table table, table").each((_, table) => {
-        // Verify we are dealing with the correct structural tracking log matrix
-        const sampleText = clean($(table).text()).toUpperCase();
-        if (!sampleText.includes("WAYPOINT") || !sampleText.includes("REM FUEL")) return;
-
-        $(table).find("tr").each((_, tr) => {
-            const cells = [];
-            $(tr).find("td, th").each((_, cell) => { cells.push(clean($(cell).text())); });
-
-            if (cells.length < 12) return; // Discard partial block wrappers
-
-            const flagText = cells.join(" ").toUpperCase();
-            if (flagText.includes("WAYPOINT") || flagText.includes("IDENT") || flagText.includes("AIRWAY")) return;
-
-            // Map data items using ForeFlight's strict 19-column table indices
-            targetWaypoints.push({
-                waypoint:           cells[0] || "",
-                airway:             cells[1] || "",
-                heading:            cells[2] || "", // HDG
-                course:             cells[3] || "", // CRS
-                flightLevel:        cells[4] || "", // ALT
-                windDirectionSpeed: cells[6] || "", // DIR/SPD
-                isa:                cells[7] || "", // ISA
-                tas:                cells[8] || "", // TAS
-                gs:                 cells[9] || "", // GS
-                legDistance:        cells[10] || "", // LEG
-                remainingDistance:  cells[11] || "", // REM
-                fuelUsed:           cells[12] || "", // USED
-                fuelRemaining:      cells[13] || "", // REM Fuel
-                actualFuel:         cells[14] || "", // ACT Fuel
-                legTimeRemaining:   cells[15] || "", // LEG Time
-                ete:                cells[17] || "", // ETE
-                eta:                cells[16] || "", // REM Time / ETA Cross link
-                ata:                "",
-            });
-        });
-    });
-    result.waypoints = targetWaypoints.filter(row => row.waypoint !== "");
-
-    // =====================================================
-    // 3️⃣ AIRPORT PARSER (Dynamic Section Table Sniffer)
-    // =====================================================
-    const targetAirports = [];
-    $("table").each((_, table) => {
-        const headerText = clean($(table).find("tr").first().text()).toUpperCase();
-        // Look for typical airport tracking frequency labels inside rows
-        if (headerText.includes("ATIS") || headerText.includes("TOWER") || headerText.includes("ELEV")) {
-            $(table).find("tr").each((_, tr) => {
-                const cells = [];
-                $(tr).find("td, th").each((_, td) => { cells.push(clean($(td).text())); });
-
-                if (cells.length >= 4) {
-                    const headingCheck = cells.join(" ").toUpperCase();
-                    if (headingCheck.includes("ATIS") || headingCheck.includes("TOWER") || headingCheck.includes("FREQ")) return;
-
-                    targetAirports.push({
-                        airport:   cells[0] || "",
-                        eta:       cells[1] || "",
-                        atis:      cells[2] || "",
-                        tower:     cells[3] || "",
-                        clearance: cells[4] || "",
-                        ground:    cells[5] || "",
-                        elevation: cells[6] || "",
-                        runway:    cells[7] || ""
-                    });
-                }
-            });
-        }
-    });
-    result.airportInfo = targetAirports.filter(row => row.airport !== "");
-
-    // =====================================================
-    // 4️⃣ WINDS PARSER (Dynamic Section Table Sniffer)
-    // =====================================================
-    const targetWinds = [];
-    $("table").each((_, table) => {
-        const headerText = clean($(table).text()).toUpperCase();
-        // Sniff out altitude profile matrix maps
-        if (headerText.includes("FL380") || headerText.includes("FL340") || headerText.includes("ENROUTE WINDS")) {
-            $(table).find("tr").each((_, tr) => {
-                const cells = [];
-                $(tr).find("td, th").each((_, cell) => { cells.push(clean($(cell).text())); });
-
-                if (cells.length >= 2) {
-                    const headingCheck = cells.join(" ").toUpperCase();
-                    if (headingCheck.includes("IDENT") || headingCheck.includes("FL380") || headingCheck.includes("ENROUTE")) return;
-
-                    targetWinds.push({
-                        ident: cells[0] || "",
-                        fl380: cells[1] || "",
-                        fl360: cells[2] || "",
-                        fl340: cells[3] || "",
-                        fl320: cells[4] || "",
-                        fl300: cells[5] || ""
-                    });
-                }
-            });
-        }
-    });
-    result.enrouteWinds = targetWinds.filter(row => row.ident !== "" && row.ident.toUpperCase() !== "IDENT");
-
-    // =====================================================
-    // MISCELLANEOUS / LINKAGES
-    // =====================================================
-    result.misc.isa            = extractTextLabelValue($, ["ISA"]);
-    result.misc.gs             = result.performance.gs || extractTextLabelValue($, ["GS", "Ground Speed"]);
-    result.misc.trueCourse     = extractTextLabelValue($, ["True Course", "TC"]);
-    result.misc.magneticCourse = extractTextLabelValue($, ["Magnetic Course", "MC"]);
-    
-    result.performance.isa = result.misc.isa;
-    result.performance.gs = result.misc.gs;
-    result.performance.trueCourse = result.misc.trueCourse;
-    result.performance.magneticCourse = result.misc.magneticCourse;
-
-    // Extract Alternate Routes
-    $(".alternate-route, section.alternates div").each((_, el) => {
-        const txt = clean($(el).text());
-        if (txt) result.alternates.push({ route: txt });
-    });
-
-    // =====================================================
-    // MANDATORY DIAGNOSTIC TELEMETRY DEBUG PRINT
-    // =====================================================
-    console.log("\n--- DEBUG: PERFORMANCE OBJECT ---");
-    console.log(result.performance);
-    console.log("\n--- DEBUG: FUEL OBJECT ---");
-    console.log(result.fuel);
-    console.log("\n--- DEBUG: WEIGHT OBJECT ---");
-    console.log(result.weight);
-    console.log("\n--- DEBUG: ROUTE EXTRACTION ---");
-    console.log("Route:", result.route);
-    console.log("\n--- DEBUG: RECORD MATRIX METRICS ---");
-    console.log("Waypoints Parsed:   ", result.waypoints.length);
-    console.log("Airport Info Rows:  ", result.airportInfo.length);
-    console.log("Enroute Winds Rows: ", result.enrouteWinds.length);
+    console.log("Title:              ", result.title);
+    console.log("Departure/Dest:      ", result.departure, "->", result.destination);
+    console.log("Registration/Type:   ", result.summary.registration, result.summary.aircraftType);
+    console.log("Waypoints parsed:    ", result.waypoints.length);
+    console.log("Airport info rows:   ", result.airportInfo.length);
+    console.log("Enroute wind bands:  ", result.enrouteWinds.bands.length);
+    console.log("Enroute wind rows:   ", result.enrouteWinds.rows.length);
     console.log("========================================");
 
     return result;

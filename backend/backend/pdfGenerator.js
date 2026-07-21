@@ -698,6 +698,11 @@ function combinedRowValue(row, key) {
       row.fuelUsed,
       row.fuelRemaining
     ],
+    // LEG/REM *time* columns (distinct from the LEG/REM *distance* columns above)
+    legTimeRemaining: [
+      row.legTime,
+      row.remainingTime
+    ],
     eta: [row.eta, row.ata]
   };
 
@@ -869,7 +874,7 @@ function drawPagesTwoAndThree(doc, data) {
     ["type", "", 44],
     ["airport", "Airport", 50],
     ["eta", "ETA", 44],
-    ["atis", "ATIS", 47],
+    ["atis", "WX", 47],
     ["tower", "TWR/CTAF", 83],
     ["clearance", "CLR", 63],
     ["ground", "GND", 45],
@@ -1003,71 +1008,75 @@ function drawPageFour(doc, data) {
     }
   );
 
-  const windColumns = [
-    ["identifier", "IDENT", 80],
-    ["fl300Wind", "FL 300\nW/V", 43],
-    ["fl300Temperature", "TMP", 35],
-    ["fl320Wind", "FL 320\nW/V", 43],
-    ["fl320Temperature", "TMP", 35],
-    ["fl340Wind", "FL 340\nW/V", 43],
-    ["fl340Temperature", "TMP", 35],
-    ["fl360Wind", "FL 360\nW/V", 43],
-    ["fl360Temperature", "TMP", 35],
-    ["fl380Wind", "FL 380\nW/V", 43],
-    ["fl380Temperature", "TMP", 35]
-  ];
+  // -----------------------------------------------------
+  // Enroute winds table - DYNAMIC band count.
+  // ForeFlight's altitude/FL bands depend on the aircraft profile
+  // (e.g. FL70-150 for a turboprop climbing to FL110, vs FL300-380
+  // for a jet), so this is no longer hardcoded to a fixed FL range.
+  // -----------------------------------------------------
 
-  let x = 69;
+  const bands = data.enrouteWindBands || [];
+  const windRows = data.enrouteWinds || [];
+
+  const tableLeft = 69;
+  const tableWidth = 474;
+  const identWidth = 70;
+  const bandCount = Math.max(bands.length, 1);
+  const subColWidth = Math.max(
+    26,
+    Math.floor((tableWidth - identWidth) / (bandCount * 2))
+  );
+
+  // Shorten "FL 70 (ISA: 1°C)" -> "FL 70" for the column header
+  const shortBandLabel = (label) =>
+    (String(label || "").match(/^[^(]+/) || [""])[0].trim();
+
+  let x = tableLeft;
   let y = 200;
 
-  windColumns.forEach(
-    ([, heading, width]) => {
-      write(
-        doc,
-        heading,
-        x,
-        y,
-        width,
-        {
-          size: 6.5,
-          align: "center"
-        }
-      );
+  write(doc, "IDENT", x, y, identWidth, {
+    size: 6.5,
+    align: "left"
+  });
+  x += identWidth;
 
-      x += width;
-    }
-  );
+  bands.forEach((band) => {
+    write(doc, `${shortBandLabel(band)}\nW/V`, x, y, subColWidth, {
+      size: 6.5,
+      align: "center"
+    });
+    write(doc, "TMP", x + subColWidth, y, subColWidth, {
+      size: 6.5,
+      align: "center"
+    });
+    x += subColWidth * 2;
+  });
 
   y += 27;
 
-  (data.enrouteWinds || []).forEach(
-    (windRow) => {
-      x = 69;
+  windRows.forEach((row) => {
+    x = tableLeft;
 
-      windColumns.forEach(
-        ([key, , width]) => {
-          write(
-            doc,
-            windRow[key],
-            x,
-            y,
-            width,
-            {
-              size: 6.5,
-              align:
-                key === "identifier"
-                  ? "left"
-                  : "center"
-            }
-          );
+    write(doc, row.identifier, x, y, identWidth, {
+      size: 6.5,
+      align: "left"
+    });
+    x += identWidth;
 
-          x += width;
-        }
-      );
+    (row.values || []).forEach((cell) => {
+      write(doc, cell.wind, x, y, subColWidth, {
+        size: 6.5,
+        align: "center"
+      });
+      write(doc, cell.isa, x + subColWidth, y, subColWidth, {
+        size: 6.5,
+        align: "center"
+      });
+      x += subColWidth * 2;
+    });
 
-      y += 14;
-    }
-  );
+    y += 14;
+  });
 
   write(
     doc,

@@ -1,868 +1,324 @@
-require("dotenv").config();
-
-const Anthropic = require("@anthropic-ai/sdk");
-
+// ======================================================
+// FOREFLIGHT -> FORUM AVIATION OPS FPL TRANSFORMER
+// ======================================================
+// NOTE: This file is intentionally NOT calling the Anthropic API anymore.
+//
+// Why: the old version sent the whole parsed navlog (including every
+// waypoint row) to Claude and asked it to retype the entire structure as
+// JSON. That's a real risk for a flight-planning document - an LLM can
+// drop, merge, or subtly reformat a row in a 20+ row table, and there is
+// no way to catch that from the output alone. Now that htmlParser.js pulls
+// data from ForeFlight's real, labeled DOM structure, there's no more
+// ambiguous "which field is this" guessing for an LLM to resolve - it's a
+// deterministic field-by-field copy. Doing it in plain JS is faster, free,
+// and can't hallucinate a fuel or weight number.
+//
+// The exported function name/signature (`convertWithClaude(masterJson)`)
+// is kept the same so server.js doesn't need to change.
+// ======================================================
 
 // ======================================================
-// CLAUDE CLIENT
-// ======================================================
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-});
-
-
-// ======================================================
-// EXTRACT JSON FROM CLAUDE
-// ======================================================
-
-function extractJSON(output) {
-
-  const cleaned = String(output)
-    .replace(/```json/gi, "")
-    .replace(/```/g, "")
-    .trim();
-
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-
-  if (start === -1 || end === -1) {
-    throw new Error("Claude did not return JSON.");
-  }
-
-  return JSON.parse(
-    cleaned.substring(start, end + 1)
-  );
-
-}
-
-
-
-// ======================================================
-// ENSURE OBJECT
+// HELPERS
 // ======================================================
 
 function object(value) {
-
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value)
-  ) {
-    return value;
-  }
-
-  return {};
-
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
-
-
-
-// ======================================================
-// ENSURE ARRAY
-// ======================================================
 
 function array(value) {
-
-  return Array.isArray(value)
-    ? value
-    : [];
-
+  return Array.isArray(value) ? value : [];
 }
-
-
-
-// ======================================================
-// RETURN FIRST NON EMPTY VALUE
-// ======================================================
 
 function first(...values) {
-
   for (const value of values) {
-
-    if (
-      value !== undefined &&
-      value !== null &&
-      String(value).trim() !== ""
-    ) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
       return value;
     }
-
   }
-
   return "";
-
 }
 
+// Returns "" unless every argument is a valid number, otherwise the sum,
+// rounded to the nearest whole unit (fuel/weight are always whole lbs/kg).
+function sumIfComplete(...values) {
+  const nums = [];
+  for (const v of values) {
+    if (v === undefined || v === null || String(v).trim() === "") continue;
+    const n = Number(v);
+    if (Number.isNaN(n)) return "";
+    nums.push(n);
+  }
+  if (nums.length === 0) return "";
+  return String(Math.round(nums.reduce((a, b) => a + b, 0)));
+}
 
+function subtractIfComplete(a, b) {
+  if (a === undefined || a === null || String(a).trim() === "") return "";
+  if (b === undefined || b === null || String(b).trim() === "") return "";
+  const na = Number(a);
+  const nb = Number(b);
+  if (Number.isNaN(na) || Number.isNaN(nb)) return "";
+  return String(Math.round(na - nb));
+}
 
 // ======================================================
-// VALIDATE CLAUDE OUTPUT
+// VALIDATE / SHAPE OUTPUT
 // ======================================================
 
 function validate(data) {
-
   data = object(data);
 
   data.page1 = object(data.page1);
+  data.page1.header = object(data.page1.header);
+  data.page1.flightInfo = object(data.page1.flightInfo);
+  data.page1.time = object(data.page1.time);
+  data.page1.fuel = object(data.page1.fuel);
+  data.page1.weight = object(data.page1.weight);
+  data.page1.misc = object(data.page1.misc);
+  data.page1.operational = object(data.page1.operational);
+  data.page1.alternates = array(data.page1.alternates);
 
-  data.page1.header =
-    object(data.page1.header);
+  data.routes = object(data.routes);
+  data.atcFlightPlan = object(data.atcFlightPlan);
 
-  data.page1.flightInfo =
-    object(data.page1.flightInfo);
+  data.mainNavlog = array(data.mainNavlog);
+  data.alternate1Navlog = array(data.alternate1Navlog);
+  data.alternate2Navlog = array(data.alternate2Navlog);
 
-  data.page1.time =
-    object(data.page1.time);
-
-  data.page1.fuel =
-    object(data.page1.fuel);
-
-  data.page1.weight =
-    object(data.page1.weight);
-
-  data.page1.misc =
-    object(data.page1.misc);
-
-  data.page1.operational =
-    object(data.page1.operational);
-
-  data.page1.alternates =
-    array(data.page1.alternates);
-
-  data.routes =
-    object(data.routes);
-
-  data.atcFlightPlan =
-    object(data.atcFlightPlan);
-
-  data.mainNavlog =
-    array(data.mainNavlog);
-
-  data.alternate1Navlog =
-    array(data.alternate1Navlog);
-
-  data.alternate2Navlog =
-    array(data.alternate2Navlog);
-
-  data.airportInformation =
-    array(data.airportInformation);
-
-  data.enrouteWinds =
-    array(data.enrouteWinds);
+  data.airportInformation = array(data.airportInformation);
+  data.enrouteWindBands = array(data.enrouteWindBands);
+  data.enrouteWinds = array(data.enrouteWinds);
 
   return data;
-
 }
+
+// ======================================================
+// WAYPOINT ROW MAPPING (parser field names -> PDF field names)
+// These are already aligned 1:1 with htmlParser.js output, so this is a
+// pure passthrough - but it's an explicit copy so a future parser field
+// rename can't silently break the PDF without a clear error here.
+// ======================================================
+
+function mapWaypointRow(row) {
+  return {
+    waypoint: row.waypoint || "",
+    waypointDetail: row.waypointDetail || "",
+    airway: row.airway || "",
+    heading: row.heading || "",
+    course: row.course || "",
+    flightLevel: row.flightLevel || "",
+    windComponent: row.windComponent || "",
+    windDirectionSpeed: row.windDirectionSpeed || "",
+    isa: row.isa || "",
+    tas: row.tas || "",
+    gs: row.gs || "",
+    legDistance: row.legDistance || "",
+    remainingDistance: row.remainingDistance || "",
+    fuelUsed: row.fuelUsed || "",
+    fuelRemaining: row.fuelRemaining || "",
+    actualFuel: row.actualFuel || "",
+    legTime: row.legTime || "",
+    remainingTime: row.remainingTime || "",
+    ete: row.ete || "",
+    eta: row.eta || "",
+    ata: row.ata || ""
+  };
+}
+
+function mapAirportRow(row) {
+  return {
+    type: row.type || "",
+    airport: row.airport || "",
+    eta: row.eta || "",
+    atis: row.atis || "",
+    tower: row.tower || "",
+    clearance: row.clearance || "",
+    ground: row.ground || "",
+    elevation: row.elevation || "",
+    longestRunway: row.runway || "",
+    runwayLength: row.runwayLength || ""
+  };
+}
+
 // ======================================================
 // MAIN CONVERSION FUNCTION
 // ======================================================
 
 async function convertWithClaude(masterJson) {
-
-  console.log("🤖 Claude processing...");
-
-  const prompt = `
-
-You are a senior airline dispatcher and operational flight planner.
-
-You will receive a MASTER JSON extracted from ForeFlight Navlog HTML.
-
-Your job is to convert it into COMPLETE Forum Aviation OPS FPL JSON.
-
-==================================================
-IMPORTANT RULES
-==================================================
-
-1. Return ONLY VALID JSON.
-2. No markdown.
-3. No explanation.
-4. Never invent aviation values.
-5. Preserve every waypoint.
-6. Never summarize tables.
-7. Copy every value that exists.
-8. If information is missing, return an empty string.
-9. Match fields by MEANING, not exact key names.
-10. Keep aviation units exactly as given.
-
-==================================================
-USER INPUT
-==================================================
-
-Always use these values from userInput whenever available.
-
-callSign
-
-pilotName
-
-coPilotName
-
-departure
-
-destination
-
-flightLevel
-
-paxWeight
-
-maxTripFuel
-
-endurance
-
-shortFPL
-
-Map them to
-
-page1.flightInfo.flight
-
-page1.flightInfo.pic
-
-page1.flightInfo.fo
-
-page1.flightInfo.departure
-
-page1.flightInfo.destination
-
-page1.flightInfo.flightLevel
-
-page1.weight.pax
-
-page1.fuel.extra
-
-page1.fuel.extraEndurance
-
-page1.misc.atcRoute
-
-==================================================
-FORELIGHT DATA
-==================================================
-
-Search ALL keys inside
-
-mainRoute.performance
-
-mainRoute.fuel
-
-mainRoute.weight
-
-mainRoute.airportInfo
-
-mainRoute.header
-
-mainRoute.route
-
-Never depend on one exact key name.
-
-Examples
-
-Taxi Fuel
-
-Taxi
-
-Taxi Burn
-
-TX Fuel
-
-→ page1.fuel.taxi
-
-Trip Fuel
-
-Flight Fuel
-
-Enroute Fuel
-
-→ page1.fuel.trip
-
-Ramp Fuel
-
-Block Fuel
-
-→ page1.fuel.ramp
-
-Reserve Fuel
-
-Final Reserve
-
-→ page1.fuel.finalReserve
-
-Alternate Fuel
-
-→ page1.fuel.alternate
-
-Extra Fuel
-
-→ page1.fuel.extra
-
-Distance
-
-Route Distance
-
-Planned Distance
-
-→ page1.time.plannedRouteDistance
-
-Average Wind
-
-Avg Wind
-
-→ page1.time.averageWinds
-
-ETD
-
-Departure Time
-
-→ page1.time.etd
-
-ETA
-
-Arrival Time
-
-→ page1.time.eta
-
-Registration
-
-Aircraft Registration
-
-Tail Number
-
-→ page1.header.registration
-
-→ page1.flightInfo.registration
-
-TOW
-
-Takeoff Weight
-
-→ page1.weight.takeoffWeight
-
-ELW
-
-Landing Weight
-
-LAW
-
-→ page1.weight.estimatedLandingWeight
-
-==================================================
-WAYPOINTS
-==================================================
-
-Convert EVERY waypoint.
-
-Never delete rows.
-
-Never merge rows.
-
-Copy exactly.
-
-Map
-
-Waypoint
-
-Fix
-
-Identifier
-
-→ waypoint
-
-Airway
-
-→ airway
-
-Heading
-
-HDG
-
-→ heading
-
-Course
-
-CRS
-
-→ course
-
-Flight Level
-
-Altitude
-
-FL
-
-→ flightLevel
-
-Wind
-
-→ windDirectionSpeed
-
-Temperature
-
-ISA
-
-→ isa
-
-TAS
-
-→ tas
-
-Ground Speed
-
-GS
-
-→ gs
-
-Leg Distance
-
-→ legDistance
-
-Remaining Distance
-
-→ remainingDistance
-
-Fuel Used
-
-→ fuelUsed
-
-Fuel Remaining
-
-→ fuelRemaining
-
-ETE
-
-→ ete
-
-Time Remaining
-
-→ legTimeRemaining
-
-ETA
-
-→ eta
-
-ATA
-
-→ ata
-
-Actual Fuel
-
-→ actualFuel
-
-Main Route
-
-→ mainNavlog
-
-Alternate 1
-
-→ alternate1Navlog
-
-Alternate 2
-
-→ alternate2Navlog
-
-==================================================
-==================================================
-FUEL CALCULATIONS
-==================================================
-
-Only calculate when enough information exists.
-
-Never guess.
-
-Calculate if possible
-
-Taxi Fuel
-
-Trip Fuel
-
-Contingency Fuel
-
-Alternate Fuel
-
-Final Reserve Fuel
-
-Required Fuel
-
-Takeoff Fuel
-
-Ramp Fuel
-
-Extra Fuel
-
-Remaining Fuel
-
-Required Endurance
-
-Takeoff Endurance
-
-Ramp Endurance
-
-==================================================
-WEIGHT CALCULATIONS
-==================================================
-
-Calculate only if source values exist.
-
-Basic Operating Weight
-
-Payload
-
-Zero Fuel Weight
-
-Takeoff Weight
-
-Estimated Landing Weight
-
-==================================================
-AIRPORT INFORMATION
-==================================================
-
-Extract airport information whenever available.
-
-Airport
-
-ETA
-
-ATIS
-
-Ground
-
-Tower
-
-Clearance
-
-Elevation
-
-Longest Runway
-
-Runway Length
-
-Populate
-
-airportInformation[]
-
-==================================================
-ATC FLIGHT PLAN
-==================================================
-
-Populate
-
-title
-
-flightPlanText
-
-flightRules
-
-flightType
-
-aircraftNumber
-
-aircraftType
-
-wakeTurbulence
-
-equipment
-
-surveillance
-
-departure
-
-departureTime
-
-speed
-
-level
-
-route
-
-destination
-
-totalEET
-
-alternate1
-
-alternate2
-
-otherInformation
-
-==================================================
-ENROUTE WINDS
-==================================================
-
-Populate
-
-identifier
-
-FL300
-
-FL320
-
-FL340
-
-FL360
-
-FL380
-
-Wind
-
-Temperature
-
-==================================================
-RETURN THIS JSON STRUCTURE
-
-{
-
-"page1":{
-
-"header":{},
-
-"flightInfo":{},
-
-"time":{},
-
-"fuel":{},
-
-"weight":{},
-
-"misc":{},
-
-"operational":{},
-
-"alternates":[]
-
-},
-
-"routes":{},
-
-"mainNavlog":[],
-
-"alternate1Navlog":[],
-
-"alternate2Navlog":[],
-
-"airportInformation":[],
-
-"atcFlightPlan":{},
-
-"enrouteWinds":[]
-
-}
-
-MASTER JSON
-
-${JSON.stringify(masterJson)}
-
-`;
-// ======================================================
-// SEND TO CLAUDE
-// ======================================================
-
-  let output = "";
-
-  const stream = anthropic.messages.stream({
-
-    model:
-      process.env.CLAUDE_MODEL ||
-      "claude-sonnet-4-5",
-
-    max_tokens: 24000,
-
-    temperature: 0,
-
-    messages: [
-      {
-        role: "user",
-        content: prompt
-      }
-    ]
-
+  console.log("🔧 Building Forum Aviation OPS FPL JSON (deterministic transform)...");
+
+  const userInput = object(masterJson.userInput);
+  const main = object(masterJson.mainRoute);
+  const alt1 = object(masterJson.alternate1);
+  const alt2 = object(masterJson.alternate2);
+
+  const summary = object(main.summary);
+  const fw = object(main.fuelWeights);
+
+  const data = validate({});
+  const page1 = data.page1;
+
+  // -------------------- FLIGHT INFO --------------------
+
+  page1.flightInfo.flight = first(userInput.callSign, summary.registration);
+  page1.flightInfo.pic = first(userInput.pilotName, summary.pic);
+  page1.flightInfo.fo = first(userInput.coPilotName);
+  page1.flightInfo.registration = first(summary.registration, userInput.callSign);
+  page1.flightInfo.departure = first(userInput.departure, main.departure);
+  page1.flightInfo.destination = first(userInput.destination, main.destination);
+  page1.flightInfo.flightLevel = first(userInput.flightLevel, summary.altitude);
+  page1.flightInfo.date = ""; // ForeFlight navlog HTML does not include a flight date
+
+  // ALT1 field lists the alternate airports (destinations of the alternate routes)
+  const alt1Dest = first(alt1.destination, "");
+  const alt2Dest = first(alt2.destination, "");
+  page1.flightInfo.alternate1 = [alt1Dest, alt2Dest].filter(Boolean).join(",");
+
+  // -------------------- HEADER --------------------
+
+  page1.header.registration = first(summary.registration, userInput.callSign);
+  page1.header.routeTitle = first(
+    main.departure && main.destination ? `${main.departure} - ${main.destination}` : "",
+    main.route
+  );
+
+  // -------------------- TIME --------------------
+
+  page1.time.etd = first(summary.etd);
+  page1.time.eta = first(summary.eta);
+  page1.time.etdLocal = "";
+  page1.time.etaLocal = "";
+  page1.time.stepClimb = ""; // not present in this ForeFlight export
+  page1.time.plannedRouteDistance = summary.distance ? `${summary.distance}` : "";
+  page1.time.averageWinds = ""; // not provided per-leg in this export
+  page1.time.averageWindComponent = "";
+  page1.time.tas = "";
+
+  // -------------------- FUEL --------------------
+
+  page1.fuel.taxi = fw.taxiFuel;
+  page1.fuel.trip = fw.flightFuel;
+  page1.fuel.tripTime = summary.ete;
+  page1.fuel.tripDistance = summary.distance ? `${summary.distance}` : "";
+  page1.fuel.contingency = ""; // ForeFlight does not break this out separately
+  page1.fuel.alternate = fw.alternateFuel;
+  page1.fuel.finalReserve = fw.reserveFuel;
+  page1.fuel.required = sumIfComplete(fw.taxiFuel, fw.flightFuel, fw.alternateFuel, fw.reserveFuel);
+  page1.fuel.extra = first(userInput.maxTripFuel, fw.extraFuel);
+  page1.fuel.extraEndurance = first(userInput.endurance);
+  page1.fuel.takeoff = subtractIfComplete(fw.blockFuel, fw.taxiFuel);
+  page1.fuel.ramp = fw.blockFuel;
+
+  // -------------------- WEIGHT --------------------
+
+  page1.weight.basicOperatingWeight = subtractIfComplete(fw.zfw, fw.payload);
+  page1.weight.pax = first(userInput.paxWeight, summary.soulsOnBoard);
+  page1.weight.load = fw.payload;
+  page1.weight.zeroFuelWeight = fw.zfw;
+  page1.weight.takeoffFuel = page1.fuel.takeoff;
+  page1.weight.takeoffWeight = fw.tow;
+  page1.weight.estimatedLandingWeight = fw.elw;
+
+  // -------------------- MISC --------------------
+
+  page1.misc.plannedProfile = summary.profile;
+  page1.misc.atcRoute = first(userInput.shortFPL, main.route);
+
+  // -------------------- OPERATIONAL (left blank - filled in by hand in-flight) --------------------
+  // page1.operational.* fields intentionally left empty; ForeFlight's export
+  // has no post-flight actuals and we never invent them.
+
+  // -------------------- ALTERNATES --------------------
+
+  const buildAlternate = (name, alt) => {
+    if (!alt || !alt.destination) return null;
+    return {
+      name,
+      airport: alt.destination,
+      route: alt.route || "",
+      flightLevel: object(alt.summary).altitude || "",
+      distance: object(alt.summary).distance ? `${object(alt.summary).distance}` : "",
+      ete: object(alt.summary).ete || "",
+      fuel: object(alt.fuelWeights).flightFuel || ""
+    };
+  };
+
+  data.page1.alternates = [
+    buildAlternate("ALT1", alt1),
+    buildAlternate("ALT2", alt2)
+  ].filter(Boolean);
+
+  // -------------------- ROUTES --------------------
+
+  data.routes.mainRoute = main.route || "";
+  data.routes.alternate1Route = alt1.route || "";
+  data.routes.alternate2Route = alt2.route || "";
+
+  // -------------------- ATC FLIGHT PLAN --------------------
+  // No raw ICAO FPL string exists in the ForeFlight export. We populate the
+  // fields we can genuinely derive and leave equipment/SSR/PBN blank rather
+  // than invent aviation values that could end up in a real flight plan.
+
+  data.atcFlightPlan = {
+    title: `ATC FLIGHT PLAN ${first(main.departure)} to ${first(main.destination)}`,
+    flightPlanText: first(userInput.shortFPL, ""),
+    flightRules: "",
+    flightType: "",
+    aircraftNumber: first(summary.registration),
+    aircraftType: first(summary.aircraftType),
+    wakeTurbulence: "",
+    equipment: "",
+    surveillance: "",
+    departure: first(main.departure),
+    departureTime: first(summary.etd),
+    speed: "",
+    level: first(userInput.flightLevel, summary.altitude),
+    route: first(main.route),
+    destination: first(main.destination),
+    totalEET: first(summary.ete),
+    alternate1: alt1Dest,
+    alternate2: alt2Dest,
+    otherInformation: ""
+  };
+
+  // -------------------- NAVLOGS --------------------
+
+  data.mainNavlog = array(main.waypoints).map(mapWaypointRow);
+  data.alternate1Navlog = array(alt1.waypoints).map(mapWaypointRow);
+  data.alternate2Navlog = array(alt2.waypoints).map(mapWaypointRow);
+
+  // -------------------- AIRPORT INFORMATION --------------------
+  // Combine main + alternates, de-duplicating by airport code so the same
+  // field (e.g. shared destination/alternate) isn't listed twice.
+
+  const seenAirports = new Set();
+  const airportRows = [];
+  [main, alt1, alt2].forEach((leg) => {
+    array(leg.airportInfo).forEach((row) => {
+      const key = `${row.type}-${row.airport}`;
+      if (seenAirports.has(key)) return;
+      seenAirports.add(key);
+      airportRows.push(mapAirportRow(row));
+    });
   });
+  data.airportInformation = airportRows;
 
-  for await (const event of stream) {
+  // -------------------- ENROUTE WINDS --------------------
+  // Direct passthrough from the parser - band count is dynamic per aircraft
+  // profile (e.g. FL70-150 for a turboprop vs FL300-380 for a jet), so the
+  // PDF generator renders whatever bands are actually present.
 
-    if (
-      event.type === "content_block_delta"
-    ) {
+  data.enrouteWindBands = array(object(main.enrouteWinds).bands);
+  data.enrouteWinds = array(object(main.enrouteWinds).rows);
 
-      output +=
-        event.delta.text || "";
+  console.log("✅ Transform complete");
+  console.log(`   Main navlog: ${data.mainNavlog.length} waypoints`);
+  console.log(`   Alt1 navlog: ${data.alternate1Navlog.length} waypoints`);
+  console.log(`   Alt2 navlog: ${data.alternate2Navlog.length} waypoints`);
+  console.log(`   Airports: ${data.airportInformation.length}`);
+  console.log(`   Wind bands: ${data.enrouteWindBands.length}, rows: ${data.enrouteWinds.length}`);
 
-    }
-
-  }
-
-  console.log("✅ Claude completed");
-
-  const finalJson =
-    extractJSON(output);
-
-  const data =
-    validate(finalJson);
-    // ======================================================
-// AUTO COMPLETE MISSING VALUES
-// ======================================================
-
-const page1 = data.page1;
-
-page1.header ||= {};
-page1.flightInfo ||= {};
-page1.time ||= {};
-page1.fuel ||= {};
-page1.weight ||= {};
-page1.misc ||= {};
-page1.operational ||= {};
-page1.alternates ||= [];
-
-const perf = masterJson.mainRoute?.performance || {};
-const fuel = masterJson.mainRoute?.fuel || {};
-const weight = masterJson.mainRoute?.weight || {};
-
-page1.flightInfo.flight =
-  first(
-    page1.flightInfo.flight,
-    masterJson.userInput.callSign
-  );
-
-page1.flightInfo.pic =
-  first(
-    page1.flightInfo.pic,
-    masterJson.userInput.pilotName
-  );
-
-page1.flightInfo.fo =
-  first(
-    page1.flightInfo.fo,
-    masterJson.userInput.coPilotName
-  );
-
-page1.flightInfo.departure =
-  first(
-    page1.flightInfo.departure,
-    masterJson.userInput.departure
-  );
-
-page1.flightInfo.destination =
-  first(
-    page1.flightInfo.destination,
-    masterJson.userInput.destination
-  );
-
-page1.flightInfo.flightLevel =
-  first(
-    page1.flightInfo.flightLevel,
-    masterJson.userInput.flightLevel
-  );
-
-page1.header.routeTitle =
-  first(
-    page1.header.routeTitle,
-    masterJson.mainRoute.route,
-    masterJson.mainRoute.header
-  );
-
-page1.routes ||= {};
-
-data.routes.mainRoute =
-  first(
-    data.routes.mainRoute,
-    masterJson.mainRoute.route
-  );
-
-page1.weight.pax =
-  first(
-    page1.weight.pax,
-    masterJson.userInput.paxWeight
-  );
-
-page1.fuel.extra =
-  first(
-    page1.fuel.extra,
-    masterJson.userInput.maxTripFuel
-  );
-
-page1.fuel.extraEndurance =
-  first(
-    page1.fuel.extraEndurance,
-    masterJson.userInput.endurance
-  );
-
-page1.misc.atcRoute =
-  first(
-    page1.misc.atcRoute,
-    masterJson.userInput.shortFPL,
-    masterJson.mainRoute.route
-  );
-
-page1.time.etd =
-  first(
-    page1.time.etd,
-    perf.ETD,
-    perf.etd
-  );
-
-page1.time.eta =
-  first(
-    page1.time.eta,
-    perf.ETA,
-    perf.eta
-  );
-
-page1.time.plannedRouteDistance =
-  first(
-    page1.time.plannedRouteDistance,
-    perf.Distance,
-    perf.distance
-  );
-
-page1.fuel.trip =
-  first(
-    page1.fuel.trip,
-    fuel.trip,
-    perf["Trip Fuel"],
-    perf["Flight Fuel"]
-  );
-
-page1.fuel.taxi =
-  first(
-    page1.fuel.taxi,
-    fuel.taxi,
-    perf["Taxi Fuel"]
-  );
-
-page1.fuel.ramp =
-  first(
-    page1.fuel.ramp,
-    fuel.ramp,
-    perf["Block Fuel"]
-  );
-
-page1.fuel.finalReserve =
-  first(
-    page1.fuel.finalReserve,
-    perf["Reserve Fuel"]
-  );
-
-page1.weight.takeoffWeight =
-  first(
-    page1.weight.takeoffWeight,
-    weight.TOW,
-    perf.TOW
-  );
-
-page1.weight.estimatedLandingWeight =
-  first(
-    page1.weight.estimatedLandingWeight,
-    weight.ELW,
-    perf.ELW
-  );
-
-// ======================================================
-// RETURN
-// ======================================================
-
-return data;
-
+  return data;
 }
-
-// ======================================================
-// EXPORT
-// ======================================================
 
 module.exports = convertWithClaude;
