@@ -1,16 +1,134 @@
-# React + Vite
+# ✈️ Navlog Convertor Website 2.0
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A full-stack web application that converts aviation navigation logs (Navlogs) into custom company-specific formats automatically. The application eliminates manual editing by parsing uploaded Navlogs and generating standardized PDF outputs in seconds.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Features
 
-## React Compiler
+- 📄 Upload Navlog files
+- 🔄 Automatic Navlog parsing
+- 📝 Convert to custom company formats
+- 📑 Generate downloadable PDF reports
+- ⚡ Fast and user-friendly interface
+- 🔒 Secure file handling
+- 📱 Responsive design for desktop and mobile
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Frontend
+- React.js
+- Vite
+- JavaScript
+- HTML5
+- CSS3
+
+### Backend
+- Python
+- Flask
+- PDF Generation Libraries
+
+### Other Tools
+- Git
+- GitHub
+
+---
+
+## 📂 Project Structure
+
+```
+navlog-converter/
+│
+├── backend/
+│   ├── server.py
+│   ├── htmlParser.py
+│   ├── pdfGenerator.py
+│   └── generated/
+│
+├── public/
+│
+├── src/
+│   ├── pages/
+│   ├── components/
+│   ├── assets/
+│   └── App.jsx
+│
+├── package.json
+├── vite.config.js
+└── README.md
+```
+
+---
+
+## ⚙️ Installation
+
+### Clone the repository
+
+```bash
+git clone https://github.com/madhusudhan1260/Navlog-convertor-website-2.0.git
+```
+
+### Navigate to the project
+
+```bash
+cd Navlog-convertor-website-2.0
+```
+
+### Install frontend dependencies
+
+```bash
+npm install
+```
+
+### Start the React application
+
+```bash
+npm run dev
+```
+
+### Start the backend
+
+```bash
+cd backend
+python server.py
+```
+
+---
+
+## 📸 Screenshots
+
+Add screenshots of:
+
+- Login Page
+- Dashboard
+- Upload Page
+- Converted PDF
+- Output Preview
+
+---
+
+## 🎯 Future Improvements
+
+- Support additional Navlog formats
+- User authentication
+- Cloud storage
+- Conversion history
+- Batch conversion
+- Export to Excel
+- Dark mode
+
+---
+
+## 👨‍💻 Author
+
+**Madhusudhan Ramshetty**
+
+- GitHub: https://github.com/madhusudhan1260
+
+---
+
+## ⭐ Support
+
+If you found this project useful, please consider giving it a ⭐ on GitHub.
