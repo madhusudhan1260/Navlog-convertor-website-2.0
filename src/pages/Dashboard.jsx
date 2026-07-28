@@ -3,15 +3,15 @@ import axios from "axios";
 
 function Dashboard() {
 
+  const [files, setFiles] = useState({
+
+    mainFile: null,
+    alternate1File: null,
+    alternate2File: null
+
+  });
+
   const [form, setForm] = useState({
-
-    // ================= HTML LINKS =================
-
-    mainUrl: "",
-    alternate1Url: "",
-    alternate2Url: "",
-
-    // ================= FLIGHT DETAILS =================
 
     callSign: "",
     pilotName: "",
@@ -29,7 +29,7 @@ function Dashboard() {
 
     shortFPL: "",
 
-    selectedFormat: "Forum Aviation Format"
+    selectedFormat: "MLOVE"
 
   });
 
@@ -41,7 +41,7 @@ function Dashboard() {
 
 
 
-  // ================= UPDATE INPUT =================
+  // ================= TEXT INPUT =================
 
   function update(event) {
 
@@ -59,13 +59,31 @@ function Dashboard() {
 
 
 
+  // ================= FILE INPUT =================
+
+  function updateFile(event) {
+
+    const { name, files: selectedFiles } = event.target;
+
+    setFiles(previous => ({
+
+      ...previous,
+
+      [name]: selectedFiles[0]
+
+    }));
+
+  }
+
+
+
   // ================= PROCESS =================
 
   async function processNavlog() {
 
-    if (!form.mainUrl) {
+    if (!files.mainFile) {
 
-      alert("Please enter Main Route HTML URL");
+      alert("Please select Main Route HTML File");
 
       return;
 
@@ -78,45 +96,75 @@ function Dashboard() {
     setJson(null);
 
     try {
-            const response = await axios.post(
+
+      const formData = new FormData();
+
+      formData.append(
+        "mainFile",
+        files.mainFile
+      );
+
+      if (files.alternate1File) {
+
+        formData.append(
+          "alternate1File",
+          files.alternate1File
+        );
+
+      }
+
+      if (files.alternate2File) {
+
+        formData.append(
+          "alternate2File",
+          files.alternate2File
+        );
+
+      }
+
+      formData.append(
+
+        "userInput",
+
+        JSON.stringify({
+
+          callSign: form.callSign,
+
+          pilotName: form.pilotName,
+
+          coPilotName: form.coPilotName,
+
+          departure: form.departure,
+
+          destination: form.destination,
+
+          flightLevel: form.flightLevel,
+
+          paxWeight: form.paxWeight,
+
+          maxTripFuel: form.maxTripFuel,
+
+          endurance: form.endurance,
+
+          shortFPL: form.shortFPL,
+
+          selectedFormat: form.selectedFormat
+
+        })
+
+      );
+
+      const response = await axios.post(
 
         "http://localhost:5000/convert",
 
+        formData,
+
         {
 
-          links: {
+          headers: {
 
-            mainUrl: form.mainUrl,
-
-            alternate1Url: form.alternate1Url,
-
-            alternate2Url: form.alternate2Url
-
-          },
-
-          userInput: {
-
-            callSign: form.callSign,
-
-            pilotName: form.pilotName,
-
-            coPilotName: form.coPilotName,
-
-            departure: form.departure,
-
-            destination: form.destination,
-
-            flightLevel: form.flightLevel,
-
-            paxWeight: form.paxWeight,
-
-            maxTripFuel: form.maxTripFuel,
-
-            endurance: form.endurance,
-
-            shortFPL: form.shortFPL,
-
-            selectedFormat: form.selectedFormat
+            "Content-Type": "multipart/form-data"
 
           }
 
@@ -148,22 +196,21 @@ function Dashboard() {
 
     <div>
 
-      {/* ================= HEADER ================= */}
-
       <div className="header">
 
         <h1>✈ EFLIGHT AI</h1>
 
-        <div>Forum Aviation OPS Generator</div>
+        <div>OPS Generator</div>
 
       </div>
 
       <div className="form-card">
 
-        <h1>Generate Forum Aviation OPS FPL</h1>
+        <h1>Generate OPS Flight Plan</h1>
 
         <hr />
-                {/* ================= CREW DETAILS ================= */}
+
+        {/* ================= CREW DETAILS ================= */}
 
         <div className="grid3">
 
@@ -189,7 +236,6 @@ function Dashboard() {
           />
 
         </div>
-
 
         {/* ================= ROUTE DETAILS ================= */}
 
@@ -217,7 +263,6 @@ function Dashboard() {
           />
 
         </div>
-
 
         {/* ================= WEIGHT DETAILS ================= */}
 
@@ -247,19 +292,23 @@ function Dashboard() {
         </div>
 
         <br />
-                {/* ================= HTML LINKS ================= */}
 
-        <h2>ForeFlight HTML Links</h2>
+        {/* ================= HTML FILES ================= */}
+
+        <h2>ForeFlight HTML Files</h2>
 
         <div className="grid1">
 
-          <input
-            type="text"
-            name="mainUrl"
-            placeholder="Paste Main Route HTML Link"
-            value={form.mainUrl}
-            onChange={update}
-          />
+          <label>
+            <strong>Main Route HTML</strong>
+
+            <input
+              type="file"
+              accept=".html,.htm"
+              name="mainFile"
+              onChange={updateFile}
+            />
+          </label>
 
         </div>
 
@@ -267,13 +316,16 @@ function Dashboard() {
 
         <div className="grid1">
 
-          <input
-            type="text"
-            name="alternate1Url"
-            placeholder="Paste Alternate 1 HTML Link (Optional)"
-            value={form.alternate1Url}
-            onChange={update}
-          />
+          <label>
+            <strong>Alternate 1 HTML (Optional)</strong>
+
+            <input
+              type="file"
+              accept=".html,.htm"
+              name="alternate1File"
+              onChange={updateFile}
+            />
+          </label>
 
         </div>
 
@@ -281,13 +333,16 @@ function Dashboard() {
 
         <div className="grid1">
 
-          <input
-            type="text"
-            name="alternate2Url"
-            placeholder="Paste Alternate 2 HTML Link (Optional)"
-            value={form.alternate2Url}
-            onChange={update}
-          />
+          <label>
+            <strong>Alternate 2 HTML (Optional)</strong>
+
+            <input
+              type="file"
+              accept=".html,.htm"
+              name="alternate2File"
+              onChange={updateFile}
+            />
+          </label>
 
         </div>
 
@@ -316,19 +371,20 @@ function Dashboard() {
           onChange={update}
         >
 
-          <option value="Forum Aviation Format">
-            Forum Aviation Format
+          <option value="MLOVE">
+            MLOVE
           </option>
 
-          <option value="Custom Format">
-            Custom Format
+          <option value="DEFAULT">
+            DEFAULT
           </option>
 
         </select>
 
         <br />
         <br />
-                {/* ================= PROCESS BUTTON ================= */}
+
+        {/* ================= PROCESS BUTTON ================= */}
 
         <button
           className="process"
@@ -337,7 +393,7 @@ function Dashboard() {
         >
           {
             loading
-              ? "✈ Generating Forum Aviation OPS PDF..."
+              ? `✈ Generating ${form.selectedFormat} OPS PDF...`
               : "🚀 Generate OPS PDF"
           }
         </button>
