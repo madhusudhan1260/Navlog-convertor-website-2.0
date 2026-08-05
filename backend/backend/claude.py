@@ -6,6 +6,19 @@ import re
 
 
 # ======================================================
+# PER-TAIL FUEL CONSTANTS (LAST-RESORT FALLBACK ONLY)
+# ======================================================
+# MIN/MAX TRIP FUEL are aircraft-config constants (not derivable from the
+# flight plan itself) that should normally come from user_input on the
+# frontend form. This table exists purely as a last-resort fallback for
+# known tails when the form genuinely doesn't supply a value - it must
+# NEVER override an explicit user_input figure. Extend as needed.
+AIRCRAFT_FUEL_LIMITS = {
+    "VTSRE": {"minTrip": "2845", "maxTrip": "3961"},
+}
+
+
+# ======================================================
 # HELPERS
 # ======================================================
 
@@ -368,6 +381,16 @@ def convert_with_claude(master_json):
     # FUEL
     # ======================================================
 
+    # Registration used to key the per-tail fuel-limit fallback table
+    # (AIRCRAFT_FUEL_LIMITS) below. Never used to override an explicit
+    # user_input value - only fills in when the form provides nothing.
+    _reg_for_limits = str(first(
+        summary.get("registration"),
+        user_input.get("callSign"),
+        ""
+    )).upper().strip()
+    _fuel_limits = AIRCRAFT_FUEL_LIMITS.get(_reg_for_limits, {})
+
     page1["fuel"]["taxi"] = fw.get("taxiFuel")
 
     page1["fuel"]["trip"] = subtract_if_complete(
@@ -429,6 +452,16 @@ def convert_with_claude(master_json):
         "0:30"
     )
 
+    # FIX: MIN DIVERT FUEL was never computed anywhere in this pipeline -
+    # default.py has always looked for keys like "minDivertFuel" but
+    # nothing upstream ever set them, so the field was permanently blank
+    # regardless of source data. Min divert fuel = fuel required to reach
+    # the first alternate + final reserve fuel (standard definition).
+    page1["fuel"]["minDivertFuel"] = sum_if_complete(
+        page1["fuel"]["alternate"],
+        fw.get("reserveFuel")
+    )
+
     page1["fuel"]["required"] = sum_if_complete(
         fw.get("taxiFuel"),
         page1["fuel"]["trip"],
@@ -443,15 +476,31 @@ def convert_with_claude(master_json):
         page1["fuel"]["required"]
     )
 
+    # FIX: MIN/MAX TRIP FUEL are aircraft-config constants that ForeFlight's
+    # export never contains (fw has no such keys) - they can only come from
+    # the frontend form. Previously this only checked the exact key names
+    # "minTripFuel"/"maxTripFuel" in user_input, so any other spelling sent
+    # by the form (e.g. "min_trip_fuel", "minimumTripFuel") silently failed
+    # and these fields rendered blank. Widened the alias list, and added a
+    # last-resort per-tail fallback (AIRCRAFT_FUEL_LIMITS above) for known
+    # aircraft so the fields aren't permanently blank if the form omits them.
     page1["fuel"]["minTripFuel"] = first(
         user_input.get("minTripFuel"),
+        user_input.get("min_trip_fuel"),
+        user_input.get("minimumTripFuel"),
+        user_input.get("minTrip"),
         fw.get("minTripFuel"),
+        _fuel_limits.get("minTrip"),
         ""
     )
 
     page1["fuel"]["maxTripFuel"] = first(
         user_input.get("maxTripFuel"),
+        user_input.get("max_trip_fuel"),
+        user_input.get("maximumTripFuel"),
+        user_input.get("maxTrip"),
         fw.get("maxTripFuel"),
+        _fuel_limits.get("maxTrip"),
         ""
     )
 
