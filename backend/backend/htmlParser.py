@@ -135,7 +135,14 @@ def parse_summary_times(soup, result):
 
         if label in ("pic", "captain"):
             result["summary"]["pic"] = value
-        elif label in ("fo", "f/o", "copilot", "first officer"):
+        # FIX: "SIC" (Second In Command) is a common label for the FO/
+        # co-pilot row in operator-side flight plans, but was never in
+        # this alias list even though default.py's own find_value() alias
+        # list for FO already anticipated "sic" as a possible key name.
+        # That downstream alias is useless if the raw HTML label is never
+        # captured here in the first place - this was the actual point
+        # where "SIC"-labelled FO rows were being silently dropped.
+        elif label in ("fo", "f/o", "copilot", "first officer", "sic"):
             result["summary"]["fo"] = value
         elif label == "souls on board":
             result["summary"]["soulsOnBoard"] = value
