@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 from bs4 import BeautifulSoup
 
 
@@ -72,7 +73,8 @@ def empty_result():
             "route": "",
             "altitude": "",
             "date": "",
-            "pax": ""
+            "pax": "",
+            "flightRules": ""
         },
         "fuelWeights": {
             "blockFuel": "",
@@ -117,6 +119,37 @@ def empty_result():
             "fplString": ""
         }
     }
+
+
+# =====================================================
+# NAVLOG HEADER TITLE
+# =====================================================
+# FIX: ForeFlight's export never has an explicit "Date" row in
+# table.summary-times, so DATE always rendered blank. The date (and the
+# flight-rules suffix, IFR/VFR) are only ever present baked into the page
+# title line, e.g.:
+#   <strong>VIDP — VECC (Aug 04, 2026) in VTECG (C25A - ...) IFR</strong>
+# Extract both from there since nothing else in the export carries them.
+
+def parse_header_title(soup, result):
+    strong = soup.select_one(".flight-summary strong")
+    header_text = clean(strong.get_text()) if strong else ""
+    if not header_text:
+        return
+
+    date_match = re.search(r"\(([A-Za-z]{3,9}\s+\d{1,2},\s*\d{4})\)", header_text)
+    if date_match:
+        for fmt in ("%b %d, %Y", "%B %d, %Y"):
+            try:
+                parsed = datetime.strptime(date_match.group(1), fmt)
+                result["summary"]["date"] = parsed.strftime("%d%b%y").upper()
+                break
+            except ValueError:
+                continue
+
+    rules_match = re.search(r"\b(IFR|VFR)\s*$", header_text, re.IGNORECASE)
+    if rules_match:
+        result["summary"]["flightRules"] = rules_match.group(1).upper()
 
 
 # =====================================================
@@ -622,6 +655,7 @@ def parse_html(html):
     result["title"] = clean(title) or "ForeFlight Navlog"
 
     # Run all extraction modules
+    parse_header_title(soup, result)
     parse_summary_times(soup, result)
     parse_performance_summary(soup, result)
     parse_fuel_weights(soup, result)

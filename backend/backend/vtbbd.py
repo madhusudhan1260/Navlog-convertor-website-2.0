@@ -1,13 +1,12 @@
 import os
 from datetime import datetime
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 from common import (
     OUTPUT_DIRECTORY,
     PAGE,
-    PAGE_OFFSET,
     box,
     draw_navlog_header,
     draw_navlog_rows,
@@ -26,6 +25,11 @@ from common import (
 # --------------------------------------------------
 # PAGE ONE SECTIONS
 # --------------------------------------------------
+# Coordinates in this file were measured directly off VTBBD's own
+# reference PDF (a PDF text-bbox extraction), not inherited from the
+# MLOVE template - the two documents share a lot of visual DNA but are
+# tuned to slightly different columns throughout, and VTBBD is Letter-
+# sized where MLOVE is A4.
 
 
 def draw_page_one(pdf, data):
@@ -52,9 +56,6 @@ def draw_header(pdf, data):
 
     flight_num = flight.get("flight") or summary.get("flight") or reg_val
 
-    # PIC / F.O. / DATE: search flight, summary, header and the top-level
-    # data dict, under every common spelling. This is what was causing
-    # PIC to show the wrong value and DATE/F.O. to show blank.
     pic_val = find_value(
         flight, summary, header, data,
         "pic", "picName", "pic_name", "captain", "commander", "commanderName",
@@ -67,26 +68,39 @@ def draw_header(pdf, data):
         flight, summary, header, data,
         "fo", "f_o", "foName", "fo_name", "firstOfficer", "first_officer", "copilot",
     )
+    cc_val = find_value(
+        flight, summary, header, data,
+        "cc", "ccName", "cabinCrew", "cabinCrewName",
+    )
 
-    labelled_value(pdf, "FLIGHT", flight_num, 73, 46 + PAGE_OFFSET, 42, 150)
-    labelled_value(pdf, "PIC", pic_val, 202, 46 + PAGE_OFFSET, 28, 175)
-    labelled_value(pdf, "DATE", date_val, 73, 61 + PAGE_OFFSET, 42, 150)
-    labelled_value(pdf, "F/O", fo_val, 202, 61 + PAGE_OFFSET, 28, 175)
+    labelled_value(pdf, "FLIGHT", flight_num, 74, 44, 34, 150)
+    labelled_value(pdf, "DATE", date_val, 74, 58, 34, 150)
+    labelled_value(pdf, "PIC", pic_val, 202, 46, 22, 175)
+
+    # F/O's value is two lines (name, then a "CC:/ <name>" cabin-crew
+    # line below it) with the "F/O" label sitting between them - not a
+    # single-line labelled_value() row like everything else in the
+    # header.
+    write(pdf, "F/O", 202, 64, 22, {"size": 8.5, "lineBreak": False})
+    write(pdf, ":", 224, 64, 8, {"size": 8.5, "lineBreak": False})
+    write(pdf, fo_val, 231, 59, 175, {"size": 8.5, "lineBreak": False})
+    if cc_val:
+        write(pdf, f"CC:/ {cc_val}", 231, 69, 175, {"size": 8.5, "lineBreak": False})
 
     write(
         pdf,
         "COMMANDER SIGN :",
-        350,
-        61 + PAGE_OFFSET,
+        352,
+        69,
         100,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 440, 63 + PAGE_OFFSET, 525, 63 + PAGE_OFFSET)
+    line(pdf, 442, 75, 527, 75)
 
 
 def draw_flight_info(pdf, data):
     flight = data.get("page1", {}).get("flightInfo", {})
-    section_heading(pdf, "FLIGHT INFO", 72, 77 + PAGE_OFFSET, 220)
+    section_heading(pdf, "FLIGHT INFO", 72, 87, 220)
 
     flight_rows = [
         ("REG", flight.get("registration")),
@@ -95,18 +109,17 @@ def draw_flight_info(pdf, data):
         ("TO", flight.get("destination")),
         ("ALT1", flight.get("alternate1")),
     ]
+    rows_y = [116, 130, 144, 157, 171]
 
-    for index, row in enumerate(flight_rows):
-        labelled_value(
-            pdf, row[0], row[1], 73, (108 + index * 14) + PAGE_OFFSET, 50, 210
-        )
+    for row, y in zip(flight_rows, rows_y):
+        labelled_value(pdf, row[0], row[1], 74, y, 81, 210)
 
 
 def draw_time_section(pdf, data):
     time = data.get("page1", {}).get("time", {}) or data.get("time", {})
     summary = data.get("main", {}).get("summary", {}) or data.get("summary", {})
 
-    section_heading(pdf, "TIME", 305, 77 + PAGE_OFFSET, 220)
+    section_heading(pdf, "TIME", 312, 87, 220)
 
     etd_str = find_value(time, summary, "etd")
     etd_loc = find_value(
@@ -122,8 +135,8 @@ def draw_time_section(pdf, data):
     )
     eta_text = f"ETA : {eta_str} (IST: {eta_loc} )" if eta_loc else f"ETA : {eta_str}"
 
-    write(pdf, etd_text, 305, 96 + PAGE_OFFSET, 120, {"size": 8.5, "lineBreak": False})
-    write(pdf, eta_text, 425, 96 + PAGE_OFFSET, 120, {"size": 8.5, "lineBreak": False})
+    write(pdf, etd_text, 310, 105, 120, {"size": 8.5, "lineBreak": False})
+    write(pdf, eta_text, 426, 105, 120, {"size": 8.5, "lineBreak": False})
 
     step_climb = find_value(time, summary, "stepClimb", "step_climb")
     isa_val = find_value(time, summary, "isa", "stepClimbIsa", "step_climb_isa")
@@ -147,31 +160,16 @@ def draw_time_section(pdf, data):
     ).upper()
     tas_val = find_value(time, summary, "tas")
 
-    time_rows = [
-        ("STEP CLIMB", step_climb_text),
-        ("PLND ROUTE", plnd_route),
-        ("AVG WINDS", avg_winds),
-        ("AVG.WC", avg_wc),
-        ("TAS", tas_val),
-    ]
-
-    for index, row in enumerate(time_rows):
-        labelled_value(
-            pdf, row[0], row[1], 305, (119 + index * 14) + PAGE_OFFSET, 80, 220
-        )
+    labelled_value(pdf, "STEP CLIMB", step_climb_text, 312, 124, 57, 220)
+    labelled_value(pdf, "PLND ROUTE", plnd_route, 312, 141, 89, 220)
+    labelled_value(pdf, "AVG WINDS", avg_winds, 312, 155, 89, 220)
+    labelled_value(pdf, "AVG.WC", avg_wc, 312, 168, 89, 220)
+    labelled_value(pdf, "TAS", tas_val, 312, 181, 89, 220)
 
 
 def draw_fuel_section(pdf, data):
     fuel = data.get("page1", {}).get("fuel", {})
-    section_heading(pdf, "FUEL", 72, 193 + PAGE_OFFSET, 220)
-
-    # NOTE: if TRIP / ALT1 / REQ / EXTRA numbers themselves are wrong
-    # (not just the endurance/time next to them), that is almost certainly
-    # happening upstream of this file -- wherever `fuel` is built before
-    # being passed into generate_pdf(). This section only renders what it
-    # is given; it cannot correct a wrong trip-fuel figure. Print the
-    # `fuel` dict at the call site of generate_pdf() to verify the values
-    # going in are already correct.
+    section_heading(pdf, "FUEL", 72, 201, 220)
 
     fuel_rows = [
         ("TAXI", fuel.get("taxi"), "", ""),
@@ -223,69 +221,102 @@ def draw_fuel_section(pdf, data):
             find_value(fuel, "rampEndurance", "ramp_endurance"),
             "",
         ),
+        (
+            "MIN DIV FUEL",
+            fuel.get("minDivertFuel"),
+            find_value(fuel, "minDivertEndurance", "min_divert_endurance"),
+            "",
+        ),
     ]
+    rows_y = [219, 232, 245, 259, 272, 285, 298, 312, 325, 336]
 
-    for index, row in enumerate(fuel_rows):
-        y = (215 + index * 14) + PAGE_OFFSET
-        write(pdf, row[0], 73, y, 85, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 158, y, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, row[1], 175, y, 40, {"size": 8.5, "align": "right", "lineBreak": False})
-        write(pdf, row[2], 225, y, 35, {"size": 8.5, "align": "center", "lineBreak": False})
-        write(pdf, row[3], 268, y, 50, {"size": 8.5, "align": "left", "lineBreak": False})
+    for row, y in zip(fuel_rows, rows_y):
+        write(pdf, row[0], 74, y, 92, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 166, y, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, row[1], 140, y, 62, {"size": 8.5, "align": "right", "lineBreak": False})
+        write(pdf, row[2], 211, y, 35, {"size": 8.5, "lineBreak": False})
+        write(pdf, row[3], 240, y, 55, {"size": 8.5, "lineBreak": False})
 
 
 def draw_weight_section(pdf, data):
     weight = data.get("page1", {}).get("weight", {})
-    section_heading(pdf, "WEIGHT", 305, 193 + PAGE_OFFSET, 220)
+    section_heading(pdf, "WEIGHT", 312, 201, 220)
 
     weight_rows = [
         ("BOW", weight.get("basicOperatingWeight")),
         ("PAX", weight.get("pax")),
+        ("CC", weight.get("cc")),
         ("LOAD", weight.get("load")),
         ("ZFW", weight.get("zeroFuelWeight")),
         ("T/O FUEL", weight.get("takeoffFuel")),
         ("TOW", weight.get("takeoffWeight")),
         ("ELW", weight.get("estimatedLandingWeight")),
     ]
+    rows_y = [222, 236, 247, 259, 272, 285, 298, 311]
 
-    for index, row in enumerate(weight_rows):
-        y = (215 + index * 14) + PAGE_OFFSET
-        labelled_value(pdf, row[0], row[1], 305, y, 55, 145)
+    for row, y in zip(weight_rows, rows_y):
+        write(pdf, row[0], 312, y, 53, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 365, y, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, row[1], 350, y, 64, {"size": 8.5, "align": "right", "lineBreak": False})
         line(pdf, 452, y + 2, 510, y + 2)
 
 
 def draw_misc_section(pdf, data):
     misc = data.get("page1", {}).get("misc", {})
-    section_heading(pdf, "MISC", 72, 344 + PAGE_OFFSET, 220)
+    section_heading(pdf, "MISC", 72, 347, 220)
 
     pln_profile = value(misc.get("plannedProfile")).upper()
 
-    # Correct output prefixes the profile with the flight rules (IFR/VFR).
-    # Prepend it if it isn't already baked into plannedProfile.
     flight_rules = find_value(misc, "flightRules", "flight_rules", "rules").upper()
     if flight_rules and not pln_profile.startswith(flight_rules):
         pln_profile = f"{flight_rules} {pln_profile}".strip()
 
-    labelled_value(pdf, "PLN PROFILE", pln_profile, 73, 364 + PAGE_OFFSET, 86, 470)
-    line(pdf, 70, 387 + PAGE_OFFSET, 542, 387 + PAGE_OFFSET, 0.7)
+    labelled_value(pdf, "PLN PROFILE", pln_profile, 74, 360, 90, 470)
+    line(pdf, 70, 377, 542, 377, 0.7)
 
     raw_route = value(misc.get("atcRoute")).upper()
     clean_route = raw_route.replace("ROUTE", "").strip() if raw_route.startswith("ROUTE") else raw_route
-    labelled_value(pdf, "ATC ROUTE", clean_route, 73, 398 + PAGE_OFFSET, 70, 470)
-    line(pdf, 70, 420 + PAGE_OFFSET, 542, 420 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "ATC ROUTE", clean_route, 72, 384, 56, 470)
+    line(pdf, 70, 401, 542, 401, 0.4)
 
 
 def draw_operational_section(pdf, data):
     operational = data.get("page1", {}).get("operational", {})
 
-    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 73, 431 + PAGE_OFFSET, 95, 455)
-    line(pdf, 70, 460 + PAGE_OFFSET, 542, 460 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 72, 411, 81, 455)
 
-    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 73, 471 + PAGE_OFFSET, 95, 455)
-    line(pdf, 70, 500 + PAGE_OFFSET, 542, 500 + PAGE_OFFSET, 0.4)
+    tofl = operational.get("tofl")
+    v_speeds = operational.get("vSpeeds") or operational.get("v1v2v2vt")
+    to_wt = operational.get("takeoffWeight") or operational.get("toWeight")
+    write(
+        pdf,
+        f"T/O DATA: TOFL{('_' * 10) if not tofl else value(tofl)}   "
+        f"V1/VR/V2/VT {('_' * 13) if not v_speeds else value(v_speeds)}   "
+        f"T/O WT {('_' * 16) if not to_wt else value(to_wt)}",
+        72,
+        442,
+        480,
+        {"size": 8.5, "lineBreak": False},
+    )
+    line(pdf, 70, 458, 542, 458, 0.4)
 
-    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 73, 511 + PAGE_OFFSET, 95, 455)
-    line(pdf, 70, 540 + PAGE_OFFSET, 542, 540 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 72, 464, 78, 455)
+    line(pdf, 70, 505, 542, 505, 0.4)
+
+    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 72, 512, 68, 455)
+
+    vref_vac = operational.get("vrefVac")
+    flaps = operational.get("flaps")
+    write(
+        pdf,
+        f"LDG DATA: VREF/VAC {('_' * 12) if not vref_vac else value(vref_vac)}   "
+        f"FLAPS{('_' * 18) if not flaps else value(flaps)}",
+        72,
+        537,
+        480,
+        {"size": 8.5, "lineBreak": False},
+    )
+    line(pdf, 70, 552, 542, 552, 0.4)
 
     operation_columns = [
         [("CHOCKS ON", operational.get("chocksOn")), ("CHOCKS OFF", operational.get("chocksOff")), ("BLOCK TIME", operational.get("blockTime"))],
@@ -293,64 +324,71 @@ def draw_operational_section(pdf, data):
         [("T/O FUEL", operational.get("takeoffFuel")), ("LDG FUEL", operational.get("landingFuel")), ("F USED", operational.get("fuelUsed"))],
         [("LDWGT", operational.get("landingWeight")), ("LDA", operational.get("lda")), ("BFLD", operational.get("bfld"))],
     ]
+    columns_x = [72, 198, 311, 425]
 
-    for column_index, column in enumerate(operation_columns):
-        x = 73 + column_index * 118
+    for x, column in zip(columns_x, operation_columns):
         for row_index, row in enumerate(column):
-            y = (551 + row_index * 15) + PAGE_OFFSET
+            y = 558 + row_index * 13.3
             write(pdf, row[0], x, y, 62, {"size": 8.5, "lineBreak": False})
             line(pdf, x + 58, y + 2, x + 106, y + 2)
             if row[1]:
                 write(pdf, row[1], x + 61, y, 44, {"size": 8.5, "lineBreak": False})
 
-    write(pdf, "RVSM CHECKS", 73, 608 + PAGE_OFFSET, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "TIME (UTC)", 160, 608 + PAGE_OFFSET, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT1", 232, 608 + PAGE_OFFSET, 60, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT2", 298, 608 + PAGE_OFFSET, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "RVSM CHECKS", 72, 613, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "TIME (UTC)", 158, 613, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT1", 230, 613, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT2", 296, 613, 60, {"size": 8.5, "lineBreak": False})
 
     for index, label_text in enumerate(["GROUND", "PRE-RVSM CHECK", "LEVEL OFF"]):
-        y = (624 + index * 15) + PAGE_OFFSET
-        write(pdf, label_text, 73, y, 90, {"size": 8.5, "lineBreak": False})
-        line(pdf, 160, y + 2, 214, y + 2)
-        line(pdf, 232, y + 2, 286, y + 2)
-        line(pdf, 298, y + 2, 352, y + 2)
+        y = 626 + index * 13.2
+        write(pdf, label_text, 72, y, 90, {"size": 8.5, "lineBreak": False})
+        line(pdf, 158, y + 2, 212, y + 2)
+        line(pdf, 230, y + 2, 284, y + 2)
+        line(pdf, 297, y + 2, 351, y + 2)
+
+    # VTBBD-only: boxed ALT ATIS note, to the right of the RVSM block.
+    box(pdf, 360, 598, 194, 57)
+    write(pdf, "ALT ATIS :", 366, 615, 100, {"size": 8.5, "lineBreak": False})
+    alt_atis = operational.get("altAtis")
+    if alt_atis:
+        write(pdf, alt_atis, 366, 630, 180, {"size": 8})
 
 
 def draw_alternates(pdf, data):
     alternates = data.get("page1", {}).get("alternates", [])
 
     for index, alternate in enumerate(alternates[:2]):
-        y = (678 + index * 32) + PAGE_OFFSET
+        y = 672 + index * 27
         raw_route = value(alternate.get("route")).replace("Route", "").strip()
 
         alt_label = alternate.get("name", f"ALT{index + 1}")
-        write(pdf, alt_label, 73, y, 35, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 112, y, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, field(alternate, "airport"), 125, y, 50, {"size": 8.5, "lineBreak": False})
+        write(pdf, alt_label, 72, y, 35, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 117, y, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, field(alternate, "airport"), 130, y, 50, {"size": 8.5, "lineBreak": False})
 
-        write(pdf, "Route", 185, y, 35, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 225, y, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, raw_route, 238, y, 220, {"size": 8.5, "lineBreak": False})
+        write(pdf, "Route", 190, y, 35, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 235, y, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, raw_route, 248, y, 220, {"size": 8.5, "lineBreak": False})
 
-        write(pdf, "FL", 73, y + 14, 20, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 112, y + 14, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, field(alternate, "flightLevel"), 125, y + 14, 50, {"size": 8.5, "lineBreak": False})
+        write(pdf, "FL", 72, y + 14, 20, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 117, y + 14, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, field(alternate, "flightLevel"), 130, y + 14, 50, {"size": 8.5, "lineBreak": False})
 
-        write(pdf, "DIST", 185, y + 14, 30, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 225, y + 14, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, field(alternate, "distance"), 238, y + 14, 55, {"size": 8.5, "lineBreak": False})
+        write(pdf, "DIST", 190, y + 14, 30, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 235, y + 14, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, field(alternate, "distance"), 248, y + 14, 55, {"size": 8.5, "lineBreak": False})
 
-        write(pdf, "ETE", 305, y + 14, 25, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 335, y + 14, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, field(alternate, "ete"), 348, y + 14, 55, {"size": 8.5, "lineBreak": False})
+        write(pdf, "ETE", 312, y + 14, 25, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 351, y + 14, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, field(alternate, "ete"), 379, y + 14, 55, {"size": 8.5, "lineBreak": False})
 
         fuel_val = field(alternate, "fuel")
         if fuel_val and not fuel_val.endswith("lbs"):
             fuel_val = f"{fuel_val} lbs"
 
-        write(pdf, "FUEL", 415, y + 14, 30, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 450, y + 14, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, fuel_val, 463, y + 14, 60, {"size": 8.5, "lineBreak": False})
+        write(pdf, "FUEL", 431, y + 14, 30, {"size": 8.5, "lineBreak": False})
+        write(pdf, ":", 476, y + 14, 8, {"size": 8.5, "lineBreak": False})
+        write(pdf, fuel_val, 502, y + 14, 60, {"size": 8.5, "lineBreak": False})
 
 
 # --------------------------------------------------
@@ -358,18 +396,43 @@ def draw_alternates(pdf, data):
 # --------------------------------------------------
 
 
+def draw_summary_row(pdf, label, fuel_val, time_val, y):
+    """The bold "APPROCH AND LAND" / "MISSED APPROACH" divider rows that
+    VTBBD inserts between the main navlog and each alternate's navlog -
+    not present in MLOVE's simpler table. Spans the full table width
+    with the running fuel/time totals dropped under the FUEL LB / TIME
+    columns, matching where those numbers sit in a normal waypoint row."""
+    height = 20
+    box(pdf, PAGE["left"], y, 496, height)
+    text_y = y + height / 2 + 3
+    write(pdf, label, PAGE["left"] + 6, text_y, 300, {"size": 8, "lineBreak": False})
+    write(pdf, value(fuel_val), 361, text_y, 39, {"size": 8, "align": "center", "lineBreak": False})
+    write(pdf, value(time_val), 400, text_y, 28, {"size": 8, "align": "center", "lineBreak": False})
+    return y + height
+
+
 def draw_pages_two_and_three(pdf, data):
     title = data.get("page1", {}).get("header", {}).get("routeTitle", "")
     registration = data.get("page1", {}).get("header", {}).get("registration", "")
+    fuel = data.get("page1", {}).get("fuel", {})
 
     pdf.showPage()
     route_header(pdf, title, registration)
     box(pdf, PAGE["left"], 32, 496, 728)
 
     y = draw_navlog_header(pdf, 32)
-    main_result = draw_navlog_rows(pdf, data.get("mainNavlog", []), y, 680)
-
+    main_result = draw_navlog_rows(pdf, data.get("mainNavlog", []), y, 660)
     y = main_result["y"]
+
+    # "APPROCH AND LAND" / "MISSED APPROACH" running totals. VTBBD's own
+    # source doesn't expose a clean formula for these two figures from
+    # the parsed waypoint data, so this uses REQUIRED fuel/time (the
+    # closest already-computed figure covering "trip + diversion
+    # capability") as a best-effort placeholder - worth checking against
+    # a second real VTBBD flight plan if the exact figures matter.
+    approach_fuel = fuel.get("required")
+    approach_time = find_value(fuel, "requiredEndurance", "required_endurance")
+    y = draw_summary_row(pdf, "APPROCH AND LAND", approach_fuel, approach_time, y)
 
     alternate_name = data.get("page1", {}).get("flightInfo", {}).get("alternate1", "")
     alternate_route = data.get("routes", {}).get("alternate1Route", "")
@@ -379,6 +442,8 @@ def draw_pages_two_and_three(pdf, data):
     title_right = f"Route {clean_alt_route}" if clean_alt_route else ""
 
     y = draw_navlog_title(pdf, title_left, title_right, y)
+    y = draw_summary_row(pdf, "MISSED APPROACH", approach_fuel, approach_time, y)
+
     alternate_result = draw_navlog_rows(pdf, data.get("alternate1Navlog", []), y, 744)
 
     pdf.showPage()
@@ -394,8 +459,13 @@ def draw_pages_two_and_three(pdf, data):
     )
 
     continuation = draw_navlog_rows(pdf, remaining_rows, y, 250)
+    y = continuation["y"]
 
-    y = continuation["y"] + 22
+    alt1_fuel = data.get("page1", {}).get("fuel", {}).get("alternate")
+    alt1_time = find_value(data.get("page1", {}).get("fuel", {}), "alternateTime", "alternate_time")
+    y = draw_summary_row(pdf, "APPROCH AND LAND", alt1_fuel, alt1_time, y)
+
+    y += 22
     write(pdf, "AIRPORT INFO", PAGE["left"], y, 150, {"size": 8.5, "bold": False, "lineBreak": False})
 
     y += 20
@@ -434,9 +504,22 @@ def draw_pages_two_and_three(pdf, data):
             x += width
         y += 22
 
+    y += 20
+    footnote_lines = [
+        "*",
+        "TRIP FUEL     :  A TO B + APCH & LDG AT B",
+        "CONTINGENCY:  5% OF TRIP FUEL OR 5 MIN FLYING AT 1500FT (WHICHEVER IS MORE)",
+        "ALT1 FUEL      :  MISSED APCH AT B + CLIMB + B TO C + APCH & LDG AT C",
+        "MIN DIV FUEL :  ALT1 + FRES",
+        "FINAL RESERVE 30 MINTS HOLD @1500 FT",
+    ]
+    for line_text in footnote_lines:
+        write(pdf, line_text, PAGE["left"], y, 496, {"size": 8.5, "lineBreak": False})
+        y += 12
+
 
 # --------------------------------------------------
-# DRAW PAGE FOUR (LAST PAGE) - FULL WINDS TABLE
+# DRAW PAGE FOUR (LAST PAGE) -- FULL WINDS TABLE
 # --------------------------------------------------
 
 
@@ -454,7 +537,7 @@ def draw_page_four(pdf, data):
         pdf,
         atc.get("title", f"ATC FLIGHT PLAN {field(atc, 'departure')} to {field(atc, 'destination')}"),
         120,
-        48 + PAGE_OFFSET,
+        48,
         380,
         {"size": 9, "align": "center", "lineBreak": False},
     )
@@ -463,13 +546,11 @@ def draw_page_four(pdf, data):
         pdf,
         ". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .",
         160,
-        60 + PAGE_OFFSET,
+        60,
         300,
         {"size": 8, "align": "center", "lineBreak": False},
     )
 
-    # This was rendering blank because "flightPlanText" was the only key
-    # ever tried. Search several likely spellings before giving up.
     flight_plan_text = find_value(
         atc,
         "flightPlanText", "flight_plan_text", "fplText", "fpl_text",
@@ -477,7 +558,7 @@ def draw_page_four(pdf, data):
         "icaoText", "icao_text", "fpl",
     )
     if flight_plan_text:
-        write(pdf, flight_plan_text, 68, 76 + PAGE_OFFSET, 476, {"size": 8})
+        write(pdf, flight_plan_text, 68, 76, 476, {"size": 8})
 
     table_left = 68
     table_width = 476
@@ -486,18 +567,11 @@ def draw_page_four(pdf, data):
         pdf,
         "ENROUTE WINDS",
         table_left,
-        180 + PAGE_OFFSET,
+        180,
         table_width,
         {"size": 8.5, "align": "center", "lineBreak": False},
     )
 
-    # Safely assemble all wind sections (main flight + alternates).
-    # Instead of guessing specific key names for the alternate-route wind
-    # rows, treat ANY list-valued key in enrouteWinds (besides "bands" and
-    # "rows") as an additional block of rows to append, in the order the
-    # keys appear. This means it no longer matters what the upstream data
-    # calls the alternate wind blocks -- if it's a list of row dicts, it
-    # gets included.
     enroute_data = data.get("enrouteWinds", {})
     if isinstance(enroute_data, dict):
         bands = enroute_data.get("bands", [])
@@ -519,8 +593,8 @@ def draw_page_four(pdf, data):
     wv_width = pair_width * 0.65
     tmp_width = pair_width * 0.35
 
-    y = 205 + PAGE_OFFSET
-    row_height = 11.0  # Compact spacing to fit long wind tables comfortably
+    y = 205
+    row_height = 11.0
 
     write(pdf, "IDENT", table_left, y, ident_col_width, {"size": 8, "lineBreak": False})
 
@@ -554,10 +628,10 @@ def draw_page_four(pdf, data):
 
         y += row_height
 
-    page_height = A4[1]
+    page_height = letter[1]
     pdf.setFont("Courier-Bold", 8.5)
     end_report_text = "**************     END OF THE REPORT    **************"
-    pdf.drawCentredString(PAGE["left"] + 496 / 2, page_height - (728 + PAGE_OFFSET), end_report_text)
+    pdf.drawCentredString(PAGE["left"] + 496 / 2, page_height - 728, end_report_text)
 
     computed_date = datetime.now().strftime("%d-%m-%Y")
     computed_time = datetime.now().strftime("%H:%M:%S")
@@ -567,24 +641,21 @@ def draw_page_four(pdf, data):
 
 
 # --------------------------------------------------
-# GENERATE PDF ENTRYPOINT (MLOVE)
+# GENERATE PDF ENTRYPOINT (VTBBD)
 # --------------------------------------------------
 
 
-def generate_mlove_pdf(navlog):
-    """Generate the MLOVE-formatted flight-plan PDF and return its
+def generate_vtbbd_pdf(navlog):
+    """Generate the VTBBD-formatted flight-plan PDF and return its
     relative path under OUTPUT_DIRECTORY."""
     os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
-    file_name = f"MLOVE{int(datetime.now().timestamp() * 1000)}.pdf"
+    file_name = f"VTBBD{int(datetime.now().timestamp() * 1000)}.pdf"
     absolute_path = os.path.join(OUTPUT_DIRECTORY, file_name)
     relative_path = os.path.join("generated", file_name)
 
-    # common.py's drawing primitives share one active page height across
-    # every template (MLOVE/A4, VTBBD/Letter) - always set it explicitly
-    # rather than relying on whatever the previous request left behind.
-    set_page_height(A4[1])
-    pdf = canvas.Canvas(absolute_path, pagesize=A4)
+    set_page_height(letter[1])
+    pdf = canvas.Canvas(absolute_path, pagesize=letter)
 
     draw_page_one(pdf, navlog)
     draw_pages_two_and_three(pdf, navlog)
@@ -593,23 +664,3 @@ def generate_mlove_pdf(navlog):
     pdf.save()
 
     return relative_path
-
-
-def generate_pdf(navlog, file_prefix="MLOVE"):
-    """Dispatch to the right template based on file_prefix.
-
-    "MLOVE" (default) is handled locally in this file.
-    "DEFAULT" and "VTBBD" are delegated to their own modules so this
-    file doesn't keep growing.
-    """
-    prefix = str(file_prefix).upper()
-
-    if prefix == "DEFAULT":
-        from default import generate_default_pdf
-        return generate_default_pdf(navlog)
-
-    if prefix == "VTBBD":
-        from vtbbd import generate_vtbbd_pdf
-        return generate_vtbbd_pdf(navlog)
-
-    return generate_mlove_pdf(navlog)
