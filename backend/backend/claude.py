@@ -108,6 +108,58 @@ def utc_to_ist(time_str):
     return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
 
 
+def hhmm_to_minutes(value):
+    """Parse "H:MM", "HH:MM" or bare "HHMM"/"HMM" into total minutes.
+    Returns None if it can't be parsed as a clock duration."""
+    v = str(value or "").strip()
+    if not v:
+        return None
+
+    match = re.match(r"^(\d{1,3}):(\d{2})$", v)
+    if match:
+        return int(match.group(1)) * 60 + int(match.group(2))
+
+    digits = re.sub(r"[^\d]", "", v)
+    if len(digits) in (3, 4):
+        return int(digits[:-2]) * 60 + int(digits[-2:])
+
+    return None
+
+
+def minutes_to_hhmm(total_minutes):
+    if total_minutes is None:
+        return ""
+    total_minutes = max(0, round(total_minutes))
+    return f"{total_minutes // 60}:{total_minutes % 60:02d}"
+
+
+def minutes_to_hm_upper(total_minutes):
+    """0h50m-style duration, e.g. 50 -> "0H50M" - the format the ALT1/
+    ALT2 summary block at the bottom of page 1 uses for ETE, matching
+    ForeFlight's own "0h50m" spelling (just uppercased), as opposed to
+    the "0:50" colon format used everywhere else in this template."""
+    if total_minutes is None:
+        return ""
+    total_minutes = max(0, round(total_minutes))
+    return f"{total_minutes // 60}H{total_minutes % 60:02d}M"
+
+
+def parse_fuel_flow_per_hour(text):
+    """Parses ForeFlight's free-text "NNN lbs/hr (Per Engine)" Fuel Flow
+    figure into a single total lbs/hr number. Doubles the figure when the
+    text says "Per Engine" (this fleet is twin-engine); returns None if
+    no number can be found at all."""
+    v = str(text or "")
+    match = re.search(r"([\d.]+)\s*lbs?/hr", v, re.IGNORECASE)
+    if not match:
+        return None
+
+    rate = float(match.group(1))
+    if re.search(r"per\s*engine", v, re.IGNORECASE):
+        rate *= 2
+    return rate
+
+
 # ======================================================
 # VALIDATE / SHAPE OUTPUT
 # ======================================================
@@ -215,8 +267,10 @@ def map_level_calculation_row(row):
 # MAIN CONVERSION FUNCTION
 # ======================================================
 
-def convert_with_claude(master_json):
+def convert_with_claude(master_json, template="MLOVE"):
     print("🔧 Building Forum Aviation OPS FPL JSON (deterministic transform)...")
+
+    template = str(template or "MLOVE").upper()
 
     user_input = object_(master_json.get("userInput"))
     main = object_(master_json.get("mainRoute"))
@@ -261,6 +315,13 @@ def convert_with_claude(master_json):
         summary.get("fo")
     )
 
+    # VTBBD-only: cabin crew name, printed as a second line under F/O.
+    page1["flightInfo"]["cc"] = first(
+        user_input.get("cabinCrewName"),
+        user_input.get("ccName"),
+        user_input.get("cc")
+    )
+
     page1["flightInfo"]["registration"] = first(
         summary.get("registration"),
         user_input.get("callSign")
@@ -284,14 +345,23 @@ def convert_with_claude(master_json):
     page1["flightInfo"]["date"] = first(
         user_input.get("date"),
         user_input.get("flightDate"),
-        user_input.get("dateOfFlight")
+        user_input.get("dateOfFlight"),
+        summary.get("date")
     )
 
     alt1_dest = first(alt1.get("destination"), "")
     alt2_dest = first(alt2.get("destination"), "")
 
+    # FIX: this field is the FLIGHT INFO box's single "ALT1" line, which
+    # ForeFlight's source PDFs render as "<main destination>,<alt1
+    # destination>" (the diversion path out of the destination), NOT a
+    # list of both alternates' own destinations. It was previously built
+    # as "alt1_dest,alt2_dest", which is a different pair of airports
+    # entirely and also propagated into the "Alternate route for ..."
+    # banner on page 2/3.
+    main_dest = first(main.get("destination"), "")
     page1["flightInfo"]["alternate1"] = ",".join(
-        [x for x in [alt1_dest, alt2_dest] if x]
+        [x for x in [main_dest, alt1_dest] if x]
     )
 
     # ======================================================
@@ -332,18 +402,40 @@ def convert_with_claude(master_json):
         summary.get("wind")
     )
 
+    # FIX: "AVG.WC" is not present anywhere in the main route's own HTML -
+    # ForeFlight only ever gives ONE "Avg Wind" figure per route, and the
+    # main route's copy of that already fills AVERAGE WINDS above. What
+    # this second field actually shows is the wind used for the ALT1
+    # diversion-fuel calc, i.e. Alternate 1's own "Avg Wind" summary figure.
     page1["time"]["averageWindComponent"] = first(
         user_input.get("averageWindComponent"),
-        summary.get("averageWindComponent")
+        summary.get("averageWindComponent"),
+        alt1_summary.get("averageWinds"),
+        alt1_summary.get("averageWind")
     )
+
+    # FIX: ForeFlight's export has no single "planned TAS" figure - each
+    # waypoint leg has its own TAS that varies with ISA deviation. Best
+    # available proxy for the planned cruise TAS is the highest TAS value
+    # reached across the main route's legs (climb/descent legs fly slower,
+    # so the max is the cruise figure). Best-effort only.
+    waypoints = array(main.get("waypoints"))
+    max_tas = 0
+    for wpt in waypoints:
+        try:
+            tas_num = float(str(wpt.get("tas", "")).strip())
+        except (TypeError, ValueError):
+            continue
+        if tas_num > max_tas:
+            max_tas = tas_num
 
     page1["time"]["tas"] = first(
         user_input.get("tas"),
-        summary.get("tas")
+        summary.get("tas"),
+        str(int(max_tas)) if max_tas else ""
     )
 
     # FIX #1: TRACK SELECTION (Filters out empty and "-" placeholders)
-    waypoints = array(main.get("waypoints"))
     track = ""
     for wpt in waypoints:
         course = str(wpt.get("course", "")).strip()
@@ -372,8 +464,22 @@ def convert_with_claude(master_json):
         toc_temp
     )
 
+    # FIX: STEP CLIMB is meant to show the recommended intermediate cruise
+    # level (this aircraft climbs to a lower level first, then steps up to
+    # the ceiling FL as it burns off weight), not the TOC waypoint's own
+    # level. The only place a recommended intermediate level shows up in
+    # ForeFlight's export is as the MIDDLE column of the winds-aloft table
+    # (bands are normally centered on cruise; when cruise sits at the
+    # aircraft's ceiling - as it does here - the bands run from several
+    # steps below up to the ceiling, and the middle one is the suggested
+    # step-climb level). That column header is already formatted exactly
+    # as "FL nnn (ISA: nn°C)", so it can be used as-is.
+    main_wind_bands = array(object_(main.get("enrouteWinds")).get("bands"))
+    mid_band = main_wind_bands[len(main_wind_bands) // 2] if main_wind_bands else ""
+
     page1["time"]["stepClimb"] = first(
         user_input.get("stepClimb"),
+        mid_band,
         page1["time"]["topClimbTemp"]
     )
 
@@ -404,16 +510,84 @@ def convert_with_claude(master_json):
         str(summary.get("distance")) if summary.get("distance") else ""
     )
 
+    # FIX: CONTINGENCY has no field of its own anywhere in ForeFlight's
+    # export, so this used to be permanently blank unless the operator
+    # typed a value in by hand. Per the operator's own instructions, each
+    # template handles it differently:
+    #   - DEFAULT: HIGHER of (a) 5% of trip fuel, or (b) fuel to fly 30
+    #     minutes at 1,500ft over the destination.
+    #   - VTBBD: HIGHER of (a) 5% of trip fuel, or (b) fuel to fly 5
+    #     minutes at 1,500ft - per VTBBD's own printed footnote ("5% OF
+    #     TRIP FUEL OR 5 MIN FLYING AT 1500FT (WHICHEVER IS MORE)").
+    #   - MLOVE: a fixed constant (250 lbs / 0:13), not computed.
+    # A manually-entered user_input figure always overrides any of these.
+    _computed_contingency_fuel = None
+    _computed_contingency_time = None
+    _trip_time_minutes_for_contingency = hhmm_to_minutes(page1["fuel"]["tripTime"])
+    _five_pct_fuel = None
+    _five_pct_time = None
+    try:
+        _five_pct_fuel = float(page1["fuel"]["trip"]) * 0.05
+    except (TypeError, ValueError):
+        pass
+    if _trip_time_minutes_for_contingency is not None:
+        _five_pct_time = _trip_time_minutes_for_contingency * 0.05
+
+    if template == "DEFAULT":
+        # (b) needs a holding-altitude fuel flow rate, which ForeFlight
+        # also never states directly - the closest available figure is
+        # the flight's own published enroute "Fuel Flow" (e.g. "372
+        # lbs/hr (Per Engine)"), used here as a best-effort stand-in.
+        _holding_rate = parse_fuel_flow_per_hour(summary.get("fuelFlow"))
+        _holding_fuel = _holding_rate * 0.5 if _holding_rate else None  # 30 min
+        _holding_time = 30 if _holding_rate else None
+
+        if _five_pct_fuel is not None and _holding_fuel is not None:
+            if _five_pct_fuel >= _holding_fuel:
+                _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
+            else:
+                _computed_contingency_fuel, _computed_contingency_time = _holding_fuel, _holding_time
+        elif _five_pct_fuel is not None:
+            _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
+        elif _holding_fuel is not None:
+            _computed_contingency_fuel, _computed_contingency_time = _holding_fuel, _holding_time
+    elif template == "VTBBD":
+        # (b) here reuses the flight's OWN trip fuel/trip time ratio as
+        # the burn rate (rather than a separately published fuel-flow
+        # figure) - verified against VTBBD's own reference document,
+        # where this reproduces its printed CONTINGENCY figures exactly.
+        _trip_rate_per_min = None
+        if _trip_time_minutes_for_contingency:
+            try:
+                _trip_rate_per_min = float(page1["fuel"]["trip"]) / _trip_time_minutes_for_contingency
+            except (TypeError, ValueError, ZeroDivisionError):
+                _trip_rate_per_min = None
+
+        _five_min_fuel = _trip_rate_per_min * 5 if _trip_rate_per_min else None
+
+        if _five_pct_fuel is not None and _five_min_fuel is not None:
+            if _five_pct_fuel >= _five_min_fuel:
+                _computed_contingency_fuel = _five_pct_fuel
+            else:
+                _computed_contingency_fuel = _five_min_fuel
+            _computed_contingency_time = _computed_contingency_fuel / _trip_rate_per_min
+        elif _five_pct_fuel is not None:
+            _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
+        elif _five_min_fuel is not None:
+            _computed_contingency_fuel, _computed_contingency_time = _five_min_fuel, 5
+    else:
+        _computed_contingency_fuel, _computed_contingency_time = 250, 13
+
     page1["fuel"]["contingency"] = first(
         user_input.get("contingencyFuel"),
         fw.get("contingencyFuel"),
-        ""
+        str(round(_computed_contingency_fuel)) if _computed_contingency_fuel is not None else ""
     )
 
     page1["fuel"]["contingencyTime"] = first(
         user_input.get("contingencyTime"),
         fw.get("contingencyTime"),
-        ""
+        minutes_to_hhmm(_computed_contingency_time) if _computed_contingency_time is not None else ""
     )
 
     _alt1_fuel_fixed = subtract_if_complete(
@@ -424,6 +598,14 @@ def convert_with_claude(master_json):
     page1["fuel"]["alternate"] = first(
         _alt1_fuel_fixed,
         fw.get("alternateFuel")
+    )
+
+    # FIX: pdfGenerator's ALT1 row also has a 4th (distance) column, which
+    # was never populated - Alternate 1's own "Distance" summary figure
+    # (already parsed by htmlParser, e.g. "223NM") was simply never wired
+    # through to this key.
+    page1["fuel"]["alternateDistance"] = (
+        str(alt1_summary.get("distance")) if alt1_summary.get("distance") else ""
     )
 
     # FIX: ALT2's diversion-fuel figure was never computed anywhere in this
@@ -441,6 +623,12 @@ def convert_with_claude(master_json):
         alt2_fw.get("alternateFuel")
     )
 
+    # FIX: pdfGenerator's ALT1 row reads "alternateTime"/"alternate_time",
+    # but this only ever set "alternate1Time" - a key nothing renders -
+    # so the ALT1 row's time column was always blank. Keep both key
+    # spellings so a future ALT2-aware template (default.py's dual-
+    # alternate layout) still has "alternate2Time" available too.
+    page1["fuel"]["alternateTime"] = alt1_summary.get("ete", "")
     page1["fuel"]["alternate1Time"] = alt1_summary.get("ete", "")
     page1["fuel"]["alternate2Time"] = alt2_summary.get("ete", "")
 
@@ -469,6 +657,59 @@ def convert_with_claude(master_json):
         page1["fuel"]["alternate"],
         fw.get("reserveFuel")
     )
+
+    # FIX: REQ/EXTRA/T-O FUEL/RAMP's TIME columns (next to their fuel
+    # figures) were never computed at all - only REQ's fuel amount was.
+    # These mirror the fuel-side formulas exactly, one clock-time term at
+    # a time:
+    #   REQ time  = TAXI time + TRIP time + CONTINGENCY time + ALT1 time
+    #               + FRES time            (same terms as REQ fuel)
+    #   RAMP time = ENDURANCE               (the operator's own total
+    #               usable-endurance figure - not derivable from the
+    #               ForeFlight export, must come from user_input)
+    #   T/O FUEL time = RAMP time - TAXI time   (same relationship as
+    #               T/O FUEL = RAMP fuel - TAXI fuel)
+    #   EXTRA time = RAMP time - REQ time       (same relationship as
+    #               EXTRA fuel = RAMP fuel - REQUIRED fuel)
+    # TAXI time itself has no field of its own anywhere in this template
+    # (its column is left blank, same as ForeFlight's own export never
+    # states a taxi time) - it only exists here as an intermediate value,
+    # derived from taxi fuel against the flight's own actual enroute burn
+    # rate (trip fuel / trip time), since that is the only burn rate this
+    # pipeline can compute without parsing the free-text "NNN lbs/hr (Per
+    # Engine)" Fuel Flow field.
+    _trip_time_minutes = hhmm_to_minutes(page1["fuel"]["tripTime"])
+    _taxi_time_minutes = None
+    if _trip_time_minutes and page1["fuel"]["trip"]:
+        try:
+            _trip_fuel_num = float(page1["fuel"]["trip"])
+            _taxi_fuel_num = float(fw.get("taxiFuel") or "")
+            if _trip_fuel_num > 0:
+                _taxi_time_minutes = _taxi_fuel_num * _trip_time_minutes / _trip_fuel_num
+        except (TypeError, ValueError):
+            _taxi_time_minutes = None
+
+    _contingency_time_minutes = hhmm_to_minutes(page1["fuel"]["contingencyTime"])
+    _alt1_time_minutes = hhmm_to_minutes(page1["fuel"]["alternateTime"])
+    _fres_time_minutes = hhmm_to_minutes(page1["fuel"]["finalReserveTime"])
+
+    _req_time_minutes = None
+    if None not in (
+        _taxi_time_minutes,
+        _trip_time_minutes,
+        _contingency_time_minutes,
+        _alt1_time_minutes,
+        _fres_time_minutes,
+    ):
+        _req_time_minutes = (
+            _taxi_time_minutes
+            + _trip_time_minutes
+            + _contingency_time_minutes
+            + _alt1_time_minutes
+            + _fres_time_minutes
+        )
+
+    page1["fuel"]["requiredEndurance"] = minutes_to_hhmm(_req_time_minutes)
 
     page1["fuel"]["computedFuel"] = first(
         user_input.get("computedFuel"),
@@ -515,23 +756,38 @@ def convert_with_claude(master_json):
         ""
     )
 
-    page1["fuel"]["extraEndurance"] = first(
-        user_input.get("endurance")
-    )
-
+    # FIX: this used to just echo the raw ENDURANCE user_input straight
+    # into the EXTRA row's time column (e.g. "0415" verbatim, unformatted,
+    # and not actually the extra-time figure at all). ENDURANCE is really
+    # the RAMP row's time (total usable endurance on the ramp); EXTRA time
+    # is RAMP time minus REQUIRED time - see the comment above required().
     page1["fuel"]["enduranceTime"] = first(
         user_input.get("enduranceTime"),
         user_input.get("endurance"),
         summary.get("endurance"),
         ""
     )
+    _endurance_minutes = hhmm_to_minutes(page1["fuel"]["enduranceTime"])
+
+    _extra_time_minutes = None
+    if _endurance_minutes is not None and _req_time_minutes is not None:
+        _extra_time_minutes = _endurance_minutes - _req_time_minutes
+
+    page1["fuel"]["extraEndurance"] = minutes_to_hhmm(_extra_time_minutes)
 
     page1["fuel"]["takeoff"] = subtract_if_complete(
         fw.get("blockFuel"),
         fw.get("taxiFuel")
     )
 
+    _takeoff_time_minutes = None
+    if _endurance_minutes is not None and _taxi_time_minutes is not None:
+        _takeoff_time_minutes = _endurance_minutes - _taxi_time_minutes
+
+    page1["fuel"]["takeoffEndurance"] = minutes_to_hhmm(_takeoff_time_minutes)
+
     page1["fuel"]["ramp"] = fw.get("blockFuel")
+    page1["fuel"]["rampEndurance"] = minutes_to_hhmm(_endurance_minutes)
 
     page1["fuel"]["landing"] = subtract_if_complete(
         page1["fuel"]["takeoff"],
@@ -559,6 +815,12 @@ def convert_with_claude(master_json):
         summary.get("pax")
     )
 
+    # VTBBD-only: cabin crew count/weight row, between PAX and LOAD.
+    page1["weight"]["cc"] = first(
+        user_input.get("ccWeight"),
+        user_input.get("cabinCrewCount")
+    )
+
     page1["weight"]["load"] = fw.get("payload")
 
     page1["weight"]["zeroFuelWeight"] = fw.get("zfw")
@@ -575,9 +837,14 @@ def convert_with_claude(master_json):
 
     page1["misc"]["plannedProfile"] = summary.get("profile")
 
+    # FIX: IFR/VFR was only ever taken from user_input, which the frontend
+    # form has no field for - so PLN PROFILE always rendered without the
+    # rules prefix. ForeFlight's own title line ends with "... IFR"/"VFR",
+    # which htmlParser.py now extracts into summary["flightRules"].
     flight_rules = first(
         user_input.get("flightRules"),
-        user_input.get("rules")
+        user_input.get("rules"),
+        summary.get("flightRules")
     )
 
     if flight_rules:
@@ -585,40 +852,36 @@ def convert_with_claude(master_json):
             f"{flight_rules} {page1['misc']['plannedProfile']}".strip()
         )
 
-    page1["misc"]["atcRoute"] = first(
-        user_input.get("shortFPL"),
-        main.get("route")
-    )
+    # FIX: this used to fall back to user_input["shortFPL"] first, but that
+    # is the SAME field the full ICAO flight-plan text below reads from
+    # ("ATC Short Flight Plan" -> icaoFlightPlan/fullFPL/icaoFPL/shortFPL
+    # chain). Whenever an operator pasted the full multi-line ICAO FPL
+    # text into that one box, it clobbered this short ATC ROUTE line with
+    # the entire FPL block. The parsed route string is always the correct
+    # short route on its own - no user override needed here.
+    page1["misc"]["atcRoute"] = first(main.get("route"))
 
     # ======================================================
     # OPERATIONAL (ATIS, CLEARANCE, AND AIRPORT INFO)
     # ======================================================
-
-    dep_atis = ""
-    arr_atis = ""
-    dep_clr = ""
-
-    for row in array(main.get("airportInfo")):
-        apt_type = str(row.get("type", "")).upper()
-        if apt_type == "DEP":
-            dep_atis = row.get("atis", "")
-            dep_clr = row.get("clearance", "")
-        elif apt_type in ("DEST", "ARR"):
-            arr_atis = row.get("atis", "")
+    # FIX: these three fields were being auto-filled from the airport-
+    # frequencies table (which is reference data - published frequencies,
+    # always shown on page 3's AIRPORT INFO table). DEPARTURE ATIS/DEP
+    # CLEARANCE/ARRIVAL ATIS on page 1 are a different thing: blank fields
+    # for the crew to log the ATIS letter/clearance actually RECEIVED on
+    # the day, filled in by hand. They must stay blank unless the operator
+    # explicitly typed something into user_input.
 
     page1["operational"]["departureAtis"] = first(
-        user_input.get("departureAtis"),
-        dep_atis
+        user_input.get("departureAtis")
     )
 
     page1["operational"]["arrivalAtis"] = first(
-        user_input.get("arrivalAtis"),
-        arr_atis
+        user_input.get("arrivalAtis")
     )
 
     page1["operational"]["departureClearance"] = first(
-        user_input.get("departureClearance"),
-        dep_clr
+        user_input.get("departureClearance")
     )
 
     # ======================================================
@@ -642,7 +905,13 @@ def convert_with_claude(master_json):
                 if alt_summary.get("distance")
                 else ""
             ),
-            "ete": alt_summary.get("ete", ""),
+            # FIX: this used the colon-format ete ("0:50", already
+            # converted by htmlParser for use elsewhere in the template) -
+            # but the expected PDF's ALT1/ALT2 summary block at the bottom
+            # of page 1 uses ForeFlight's own "0h50m"-style duration,
+            # uppercased ("0H50M"). Re-derive that format here rather than
+            # reusing the colon-converted value.
+            "ete": minutes_to_hm_upper(hhmm_to_minutes(alt_summary.get("ete", ""))),
             "fuel": alt_fw_local.get("flightFuel", "")
         }
 
@@ -742,19 +1011,23 @@ def convert_with_claude(master_json):
     # ======================================================
     # AIRPORT INFORMATION
     # ======================================================
+    # FIX: this used to pull DEP/DEST rows from the main route AND both
+    # alternates, producing 4-5 rows (VIDP/VECC plus the alternates' own
+    # departure/destination). The page 3 AIRPORT INFO table is only meant
+    # to cover the main route's own departure and destination (2 rows) -
+    # the alternates' airport details aren't part of it.
 
     seen_airports = set()
     airport_rows = []
 
-    for leg in [main, alt1, alt2]:
-        for row in array(leg.get("airportInfo")):
-            key = f"{row.get('type')}-{row.get('airport')}"
+    for row in array(main.get("airportInfo")):
+        key = f"{row.get('type')}-{row.get('airport')}"
 
-            if key in seen_airports:
-                continue
+        if key in seen_airports:
+            continue
 
-            seen_airports.add(key)
-            airport_rows.append(map_airport_row(row))
+        seen_airports.add(key)
+        airport_rows.append(map_airport_row(row))
 
     data["airportInformation"] = airport_rows
 

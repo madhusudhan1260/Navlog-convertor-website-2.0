@@ -1,6 +1,6 @@
 import os
 
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfbase.ttfonts import TTFont
@@ -56,6 +56,21 @@ PAGE_OFFSET = -6
 DEFAULT_FONT_SIZE = 8.5
 DEFAULT_LINE_WIDTH = 0.5
 DEFAULT_PADDING = 2
+
+# --------------------------------------------------
+# ACTIVE PAGE HEIGHT (for the y-from-top -> PDF y-from-bottom flip)
+# --------------------------------------------------
+# MLOVE (A4) and VTBBD (Letter) share every drawing primitive in this
+# file but use different physical page sizes. Each generator's entry
+# point must call set_page_height() before drawing anything on a fresh
+# PDF; defaults to A4 (MLOVE's size) so existing callers that never call
+# it keep behaving exactly as before.
+_ACTIVE_PAGE_HEIGHT = A4[1]
+
+
+def set_page_height(height):
+    global _ACTIVE_PAGE_HEIGHT
+    _ACTIVE_PAGE_HEIGHT = height
 
 # Set to True to print every dict's real keys the first time each
 # section function touches it. Extremely useful for tracking down
@@ -158,7 +173,7 @@ def write(pdf, text, x, y, width, options=None):
     padding = options.get("padding", DEFAULT_PADDING)
 
     pdf.setFont(font, size)
-    page_height = letter[1]
+    page_height = _ACTIVE_PAGE_HEIGHT
 
     if not line_break:
         yy = page_height - y
@@ -185,13 +200,13 @@ def write(pdf, text, x, y, width, options=None):
 
 
 def line(pdf, x1, y1, x2, y2, width=DEFAULT_LINE_WIDTH):
-    page_height = letter[1]
+    page_height = _ACTIVE_PAGE_HEIGHT
     pdf.setLineWidth(width)
     pdf.line(x1, page_height - y1, x2, page_height - y2)
 
 
 def box(pdf, x, y, width, height):
-    page_height = letter[1]
+    page_height = _ACTIVE_PAGE_HEIGHT
     pdf.setLineWidth(DEFAULT_LINE_WIDTH)
     pdf.rect(x, page_height - y - height, width, height, stroke=1, fill=0)
 
@@ -318,6 +333,20 @@ def draw_navlog_header(pdf, y):
     return y + total_header_height
 
 
+def _cell_line_count(cell_text, font_size, cell_width):
+    """Counts the lines a cell will actually occupy once word-wrapped at
+    its column width, not just the literal "\\n" characters in it."""
+    text = value(cell_text)
+    if text == "":
+        return 1
+
+    wrap_width = (cell_width - 6) - DEFAULT_PADDING * 2
+    total = 0
+    for paragraph in text.split("\n"):
+        total += len(wrap_text(paragraph, FONT_NAME, font_size, wrap_width))
+    return max(total, 1)
+
+
 def draw_navlog_rows(pdf, rows, start_y, maximum_y):
     y = start_y
     if rows is None:
@@ -329,10 +358,17 @@ def draw_navlog_rows(pdf, rows, start_y, maximum_y):
     vertical_padding = 4
 
     for index, row in enumerate(rows):
+        # FIX: this used to count only literal "\n" characters to decide
+        # how tall a row needs to be, ignoring that long text (e.g. a
+        # waypoint name like "BHUBANESWAR 113.5" in the 93pt-wide
+        # WAYPOINT column) word-wraps onto EXTRA lines on its own. That
+        # under-measured the row height, so the last visual line of text
+        # in a wrapped cell got drawn past the row's own bottom border,
+        # overlapping the next row/box edge instead of sitting inside it.
         max_lines = 1
-        for key, _, _, _ in NAV_COLUMNS:
+        for key, _, _, width in NAV_COLUMNS:
             cell_text = combined_row_value(row, key)
-            max_lines = max(max_lines, value(cell_text).count("\n") + 1)
+            max_lines = max(max_lines, _cell_line_count(cell_text, font_size, width))
 
         content_height = max_lines * line_height + vertical_padding
         height = max(min_height, content_height)
@@ -344,7 +380,7 @@ def draw_navlog_rows(pdf, rows, start_y, maximum_y):
         for key, _, _, width in NAV_COLUMNS:
             box(pdf, x, y, width, height)
             cell_text = combined_row_value(row, key)
-            line_count = value(cell_text).count("\n") + 1
+            line_count = _cell_line_count(cell_text, font_size, width)
             text_y = y + (height - (line_count * line_height)) / 2 + font_size
 
             write(

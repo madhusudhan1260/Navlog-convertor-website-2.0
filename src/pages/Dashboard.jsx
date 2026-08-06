@@ -16,6 +16,7 @@ function Dashboard() {
     callSign: "",
     pilotName: "",
     coPilotName: "",
+    cabinCrewName: "",
 
     departure: "",
     destination: "",
@@ -23,11 +24,14 @@ function Dashboard() {
     flightLevel: "",
 
     paxWeight: "",
+    ccWeight: "",
     maxTripFuel: "",
+    contingencyFuel: "",
+    contingencyTime: "",
 
     endurance: "",
 
-    shortFPL: "",
+    icaoFlightPlan: "",
 
     selectedFormat: "MLOVE"
 
@@ -134,6 +138,8 @@ function Dashboard() {
 
           coPilotName: form.coPilotName,
 
+          cabinCrewName: form.cabinCrewName,
+
           departure: form.departure,
 
           destination: form.destination,
@@ -142,11 +148,17 @@ function Dashboard() {
 
           paxWeight: form.paxWeight,
 
+          ccWeight: form.ccWeight,
+
           maxTripFuel: form.maxTripFuel,
+
+          contingencyFuel: form.contingencyFuel,
+
+          contingencyTime: form.contingencyTime,
 
           endurance: form.endurance,
 
-          shortFPL: form.shortFPL,
+          icaoFlightPlan: form.icaoFlightPlan,
 
           selectedFormat: form.selectedFormat
 
@@ -223,15 +235,35 @@ function Dashboard() {
 
           <input
             name="pilotName"
-            placeholder="Pilot Name"
+            placeholder="Pilot Name (e.g. CAPT SHREYAS VYAS)"
             value={form.pilotName}
             onChange={update}
           />
 
           <input
             name="coPilotName"
-            placeholder="Co-Pilot Name"
+            placeholder="Co-Pilot Name (e.g. CAPT SANSKAR MISHRA)"
             value={form.coPilotName}
+            onChange={update}
+          />
+
+        </div>
+
+        {/* ================= CABIN CREW (VTBBD) ================= */}
+
+        <div className="grid2">
+
+          <input
+            name="cabinCrewName"
+            placeholder="Cabin Crew Name (VTBBD only, e.g. MS SHWETA DIWAN)"
+            value={form.cabinCrewName}
+            onChange={update}
+          />
+
+          <input
+            name="ccWeight"
+            placeholder="Cabin Crew Count/Weight (VTBBD only, e.g. 1-187)"
+            value={form.ccWeight}
             onChange={update}
           />
 
@@ -286,6 +318,26 @@ function Dashboard() {
             name="endurance"
             placeholder="Endurance (HH:MM)"
             value={form.endurance}
+            onChange={update}
+          />
+
+        </div>
+
+        {/* ================= CONTINGENCY FUEL ================= */}
+
+        <div className="grid3">
+
+          <input
+            name="contingencyFuel"
+            placeholder="Contingency Fuel (lbs)"
+            value={form.contingencyFuel}
+            onChange={update}
+          />
+
+          <input
+            name="contingencyTime"
+            placeholder="Contingency Time (H:MM)"
+            value={form.contingencyTime}
             onChange={update}
           />
 
@@ -348,14 +400,14 @@ function Dashboard() {
 
         <br />
 
-        {/* ================= SHORT FPL ================= */}
+        {/* ================= ICAO FLIGHT PLAN ================= */}
 
-        <h2>ATC Short Flight Plan</h2>
+        <h2>ATC Flight Plan (full ICAO FPL text)</h2>
 
         <textarea
-          name="shortFPL"
-          placeholder="Paste Short Flight Plan"
-          value={form.shortFPL}
+          name="icaoFlightPlan"
+          placeholder="Paste the full ICAO flight plan, e.g. (FPL-VTECG-IN-C25A/L-...)"
+          value={form.icaoFlightPlan}
           onChange={update}
           rows={6}
         />
@@ -377,6 +429,10 @@ function Dashboard() {
 
           <option value="DEFAULT">
             DEFAULT
+          </option>
+
+          <option value="VTBBD">
+            VTBBD
           </option>
 
         </select>

@@ -289,10 +289,18 @@ def draw_page_one(c, data=None):
     y -= 18
     text_center(c, W / 2, y, "- - - - - - - - - - PLAN TIME & FUEL - - - - - - - - - - - - - - - - - - - - - - - - - PLAN WT (in LBS) - - - - - - - - - - - - - - - - - - -", font=FONT_NORMAL, size=8)
 
+    # FIX: CONTINGENCY was a hardcoded "0:13"/81 literal instead of the
+    # real computed figure (5% of trip fuel vs. 30-min hold at 1,500ft,
+    # whichever is higher) that claude.py now works out and passes
+    # through in `fuel` - read it from there, falling back to the old
+    # literal only if that data is somehow missing.
+    contingency_time = find_value(fuel, "contingencyTime", "contingency_time") or "0:13"
+    contingency_lbs = find_value(fuel, "contingency", "contingencyFuel") or 81
+
     plan_rows = [
         ("TRIP", "2:10", 1619),
         ("TAXI", "0:10", 125),
-        ("CONTINGENCY 5%", "0:13", 81),
+        ("CONTINGENCY", contingency_time, contingency_lbs),
         ("FINAL RESERVE FUEL", "0:30", 400),
         ("XTRA", "0:22", 238),
         ("ALTN1", "0:50", 737),

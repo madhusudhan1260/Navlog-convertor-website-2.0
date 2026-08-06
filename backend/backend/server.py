@@ -298,7 +298,9 @@ def convert():
 
         final_json = convert_with_claude(
 
-            master_json
+            master_json,
+
+            template
 
         )
 
