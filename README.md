@@ -4,6 +4,36 @@ A full-stack web application that converts aviation navigation logs (Navlogs) in
 
 ---
 
+## 🌐 Deploy
+
+Two services, because the frontend is static and the PDF generation is Python.
+**Deploy the backend first** — the frontend needs its URL.
+
+### 1. Backend → Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/madhusudhan1260/Navlog-convertor-website-2.0)
+
+Reads `render.yaml` and creates the `eflightops-api` service with no further
+configuration. You end up at `https://eflightops-api.onrender.com`.
+
+### 2. Frontend → Vercel
+
+[Import the repo on Vercel →](https://vercel.com/new/import?s=https://github.com/madhusudhan1260/Navlog-convertor-website-2.0)
+
+Two things to set on the import screen:
+
+| Field | Value |
+| --- | --- |
+| Project Name | `eflightops` |
+| Environment Variable | `VITE_API_URL` = `https://eflightops-api.onrender.com` |
+
+Framework detection picks Vite on its own. Result: `https://eflightops.vercel.app`.
+
+> Render's free tier sleeps after inactivity, so the first PDF generated
+> after an idle period waits ~30s for the backend to wake.
+
+---
+
 ## 🚀 Features
 
 - 📄 Upload Navlog files
