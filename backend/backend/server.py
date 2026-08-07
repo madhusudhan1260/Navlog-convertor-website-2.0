@@ -32,20 +32,41 @@ PORT = int(
 # Base URL the browser uses to fetch a generated PDF, so it has to be the
 # service's PUBLIC address.
 #
-# RENDER_EXTERNAL_URL is injected by Render on every web service and is
-# the full "https://name.onrender.com". Do NOT substitute a blueprint
-# `fromService: property: host` here - that resolves to the bare internal
-# service name ("eflightops-api"), which produced download links pointing
-# at a host that does not exist off-platform.
-PUBLIC_URL = (
-    os.getenv("PUBLIC_BASE_URL")
-    or os.getenv("RENDER_EXTERNAL_URL")
-    or f"http://localhost:{PORT}"
-).rstrip("/")
+# RENDER_EXTERNAL_URL is injected by Render on every web service and holds
+# the full "https://name.onrender.com". A blueprint's
+# `fromService: property: host` does NOT - it resolves to the bare
+# internal service name ("eflightops-api"), and download links built from
+# it point at a host that does not exist off-platform.
 
-# Belt and braces: a hostname supplied without a scheme still has to end
-# up absolute, or the link resolves relative to the frontend's origin.
-if PUBLIC_URL and "://" not in PUBLIC_URL:
+
+def _is_reachable_base(url):
+    """Could a browser on the public internet actually resolve this?
+
+    A bare label with no dot ("eflightops-api") is an internal service
+    name, not a hostname. Removing such a value from render.yaml does not
+    unset it on an already-provisioned service, so an operator-supplied
+    PUBLIC_BASE_URL is only trusted when it looks externally routable -
+    otherwise the platform's own value wins.
+    """
+    if not url:
+        return False
+    host = url.split("://")[-1].split("/")[0].split(":")[0]
+    return "." in host or host == "localhost"
+
+
+_configured = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+_platform = (os.getenv("RENDER_EXTERNAL_URL") or "").strip().rstrip("/")
+
+if _is_reachable_base(_configured):
+    PUBLIC_URL = _configured
+elif _is_reachable_base(_platform):
+    PUBLIC_URL = _platform
+else:
+    PUBLIC_URL = f"http://localhost:{PORT}"
+
+# A hostname supplied without a scheme still has to end up absolute, or
+# the link resolves relative to the frontend's origin.
+if "://" not in PUBLIC_URL:
     PUBLIC_URL = f"https://{PUBLIC_URL}"
 
 UPLOAD_FOLDER = os.path.join(
