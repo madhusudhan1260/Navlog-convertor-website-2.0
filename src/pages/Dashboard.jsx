@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Icons";
 import { API_URL } from "../api";
+import { authHeader, signOut } from "../auth";
 
 const FORMATS = [
   {
@@ -43,6 +45,8 @@ const FORMATS = [
 ];
 
 function Dashboard() {
+
+  const navigate = useNavigate();
 
   const [files, setFiles] = useState({
 
@@ -86,6 +90,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(false);
 
   const [pdf, setPdf] = useState(null);
+  const [pdfName, setPdfName] = useState("flight-plan.pdf");
 
   const [json, setJson] = useState(null);
 
@@ -227,7 +232,9 @@ function Dashboard() {
 
           headers: {
 
-            "Content-Type": "multipart/form-data"
+            "Content-Type": "multipart/form-data",
+
+            ...authHeader()
 
           }
 
@@ -235,7 +242,26 @@ function Dashboard() {
 
       );
 
-      setPdf(response.data.pdf);
+      // /generated is behind auth too, so the returned URL cannot just be
+      // dropped into an <a href> — a plain navigation carries no
+      // Authorization header and would come back 401. Fetch it with the
+      // token and hand the download an in-memory blob instead.
+      const pdfResponse = await fetch(response.data.pdf, {
+        headers: authHeader()
+      });
+
+      if (!pdfResponse.ok) {
+        throw new Error(`Could not retrieve the generated PDF (${pdfResponse.status}).`);
+      }
+
+      const blob = await pdfResponse.blob();
+
+      setPdf((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return URL.createObjectURL(blob);
+      });
+
+      setPdfName(response.data.pdf.split("/").pop() || "flight-plan.pdf");
 
       setJson(response.data.data);
 
@@ -335,6 +361,14 @@ function Dashboard() {
             <span className="dot" />
             OPS Generator
           </div>
+
+          <button
+            type="button"
+            className="header-tag as-button"
+            onClick={() => { signOut(); navigate("/", { replace: true }); }}
+          >
+            Sign out
+          </button>
 
         </div>
 
@@ -757,6 +791,7 @@ function Dashboard() {
 
                   <a
                     href={pdf}
+                    download={pdfName}
                     target="_blank"
                     rel="noreferrer"
                     className="download-btn"

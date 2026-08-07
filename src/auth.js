@@ -1,42 +1,77 @@
 // ---------------------------------------------------------------------
-// SINGLE-OPERATOR ACCESS GATE
+// SESSION HANDLING
 // ---------------------------------------------------------------------
-// One account only. The address is not a secret so it lives here; the
-// password is read from the build environment (VITE_AUTH_PASSWORD) so it
-// never enters the git history of a public repository.
+// Access is decided by the Flask backend, not here. This module only
+// carries the token the server issued and attaches it to requests.
 //
-// READ THIS BEFORE RELYING ON IT: Vite inlines VITE_* values into the
-// JavaScript bundle at build time. Anyone who opens the deployed site's
-// bundle can read the password. This gate keeps casual visitors out of
-// the dashboard — it is NOT protection against anyone who looks. Real
-// enforcement has to happen in the Flask backend, which is the only
-// place a secret can be held without shipping it to the browser.
+// Nothing in this file is a secret, and that is the point: a browser
+// bundle cannot keep one. The previous version compared a password that
+// Vite had inlined into the JavaScript, so it was readable by anyone who
+// opened the deployed site. Now the password never reaches the browser
+// at all — it is checked server-side against a scrypt hash.
 
-export const AUTH_EMAIL = "madhusudhan@eflight.com";
+import { API_URL } from "./api";
 
-const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD || "";
+const TOKEN_KEY = "eflight.token";
 
-// Surfaced on the login screen so a missing env var reads as a setup
-// problem rather than "my password stopped working".
-export const AUTH_CONFIGURED = AUTH_PASSWORD !== "";
-
-const SESSION_KEY = "eflight.session";
-
-export function checkCredentials(email, password) {
-  const normalised = String(email || "").trim().toLowerCase();
-  return normalised === AUTH_EMAIL && password === AUTH_PASSWORD;
+export function getToken() {
+  return sessionStorage.getItem(TOKEN_KEY) || "";
 }
 
-// Only ever a flag — the password itself is never written to storage.
-// sessionStorage rather than localStorage so closing the tab signs out.
-export function signIn() {
-  sessionStorage.setItem(SESSION_KEY, "1");
+// sessionStorage rather than localStorage: closing the tab signs out.
+export function setToken(token) {
+  sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 export function signOut() {
-  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 }
 
 export function isSignedIn() {
-  return sessionStorage.getItem(SESSION_KEY) === "1";
+  return getToken() !== "";
+}
+
+export function authHeader() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Exchange credentials for a session token.
+ * Returns { ok: true } or { ok: false, error } — never throws for an
+ * expected outcome like a wrong password.
+ */
+export async function login(email, password) {
+  let response;
+
+  try {
+    response = await fetch(`${API_URL}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return { ok: false, error: "Cannot reach the server. Check your connection." };
+  }
+
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    /* non-JSON error page — fall through to the status-based message */
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: body.error || `Sign-in failed (${response.status}).`,
+    };
+  }
+
+  if (!body.token) {
+    return { ok: false, error: "Server did not return a session token." };
+  }
+
+  setToken(body.token);
+  return { ok: true };
 }

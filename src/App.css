@@ -1485,3 +1485,15 @@
   .login-panel { padding: 32px 20px; }
   .hero-stats { grid-template-columns: 1fr 1fr; gap: 9px; }
 }
+
+/* Sign-out sits in the header pill row, so it borrows .header-tag and
+   only needs the button element's own defaults cleared. */
+.header-tag.as-button {
+  font: inherit;
+  font-size: 12.5px;
+  color: inherit;
+  cursor: pointer;
+}
+.header-tag.as-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
