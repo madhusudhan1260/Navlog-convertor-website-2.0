@@ -2,6 +2,16 @@ import os
 import json
 import traceback
 
+# Local development reads secrets from backend/backend/.env (gitignored).
+# Hosted environments set real environment variables, where this is a
+# no-op. Must run BEFORE `auth` is imported: that module resolves its
+# configuration at import time.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass
+
 from flask import (
     Flask,
     request,
@@ -15,6 +25,7 @@ from werkzeug.utils import secure_filename
 from htmlParser import parse_html
 from claude import convert_with_claude
 from pdfGenerator import generate_pdf
+from auth import AUTH_CONFIGURED, login_view, require_auth
 
 
 # =====================================================
@@ -23,7 +34,25 @@ from pdfGenerator import generate_pdf
 
 app = Flask(__name__)
 
-CORS(app)
+# Only the deployed frontend (and local dev) may call this API from a
+# browser. Previously CORS(app) allowed every origin, so any page on the
+# internet could drive the backend with a stolen token. Comma-separated
+# list; falls back to the Vite dev server.
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
+
+CORS(
+    app,
+    origins=ALLOWED_ORIGINS,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "OPTIONS"],
+)
 
 PORT = int(
     os.getenv("PORT", 5000)
@@ -98,8 +127,12 @@ DEFAULT_TEMPLATE = "MLOVE"
 # =====================================================
 
 @app.route("/generated/<path:filename>")
+@require_auth
 def generated_files(filename):
 
+    # Behind auth as well as /convert: the filenames are guessable enough
+    # (template + millisecond timestamp) that an open folder would leak
+    # finished flight plans to anyone who iterated them.
     return send_from_directory(
         GENERATED_FOLDER,
         filename
@@ -114,6 +147,25 @@ def generated_files(filename):
 def home():
 
     return "🚀 EFLIGHT AI Backend Running"
+
+
+# =====================================================
+# AUTH
+# =====================================================
+
+@app.route("/login", methods=["POST"])
+def login():
+
+    return login_view()
+
+
+@app.route("/session", methods=["GET"])
+@require_auth
+def session_check():
+
+    # Lets the frontend confirm a stored token is still good before it
+    # renders the dashboard, instead of finding out on the first upload.
+    return jsonify({"valid": True})
 
 
 # =====================================================
@@ -146,6 +198,7 @@ def empty_route():
 # =====================================================
 
 @app.route("/convert", methods=["POST"])
+@require_auth
 def convert():
 
     try:
@@ -427,6 +480,13 @@ if __name__ == "__main__":
         f"🚀 Backend Running on {PUBLIC_URL}"
 
     )
+
+    if not AUTH_CONFIGURED:
+        print(
+            "⚠️  AUTH NOT CONFIGURED — /login, /convert and /generated "
+            "will refuse every request.\n"
+            "    Set AUTH_EMAIL, AUTH_PASSWORD_HASH and SECRET_KEY."
+        )
 
     app.run(
 

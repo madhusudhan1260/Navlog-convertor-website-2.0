@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PlaneIcon, DocIcon, FuelIcon, RouteIcon } from "../components/Icons";
-import { AUTH_CONFIGURED, checkCredentials, signIn } from "../auth";
+import { login } from "../auth";
 
 function Login() {
 
@@ -10,8 +10,9 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
 
     setError("");
 
@@ -21,22 +22,18 @@ function Login() {
       return;
     }
 
-    // A missing VITE_AUTH_PASSWORD would otherwise look like a wrong
-    // password, so name the real problem instead.
-    if (!AUTH_CONFIGURED) {
-      setError("Sign-in is not configured on this deployment (VITE_AUTH_PASSWORD is unset).");
+    // The credential is checked by the backend — this component never
+    // sees the real password, so there is nothing here to read out of
+    // the bundle.
+    setBusy(true);
+    const result = await login(email, password);
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
 
-    // Single authorised operator. One message for both a wrong address
-    // and a wrong password — telling them which half was right just
-    // hands an attacker a valid username.
-    if (!checkCredentials(email, password)) {
-      setError("Incorrect email or password.");
-      return;
-    }
-
-    signIn();
     navigate("/dashboard");
 
   };
@@ -154,7 +151,9 @@ function Login() {
             />
           </div>
 
-          <button onClick={handleLogin}>SIGN IN</button>
+          <button onClick={handleLogin} disabled={busy}>
+            {busy ? "SIGNING IN…" : "SIGN IN"}
+          </button>
 
           <div className="login-foot">
             AUTHORISED PERSONNEL ONLY · EFLIGHT OPS
