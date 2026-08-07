@@ -612,4 +612,8 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
         from vtbbd import generate_vtbbd_pdf
         return generate_vtbbd_pdf(navlog)
 
+    if prefix == "VTVIK":
+        from vtvik import generate_vtvik_pdf
+        return generate_vtvik_pdf(navlog)
+
     return generate_mlove_pdf(navlog)

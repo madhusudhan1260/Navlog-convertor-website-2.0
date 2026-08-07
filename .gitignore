@@ -23,3 +23,17 @@ dist-ssr
 *.sln
 *.sw?
 backend/backend/.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+backend/backend/venv/
+
+# Runtime artefacts — regenerated per request, not source
+backend/backend/generated/
+backend/backend/uploads/
+
+# Local env
+.env.development
+.env.local

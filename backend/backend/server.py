@@ -32,7 +32,13 @@ PORT = int(
 PUBLIC_URL = os.getenv(
     "PUBLIC_BASE_URL",
     f"http://localhost:{PORT}"
-)
+).rstrip("/")
+
+# Hosts that inject this value (Render's fromService, for one) supply a
+# bare "name.onrender.com" with no scheme. Left as-is that produces a
+# relative download link and the PDF never resolves, so normalise it.
+if PUBLIC_URL and "://" not in PUBLIC_URL:
+    PUBLIC_URL = f"https://{PUBLIC_URL}"
 
 UPLOAD_FOLDER = os.path.join(
     os.path.dirname(__file__),

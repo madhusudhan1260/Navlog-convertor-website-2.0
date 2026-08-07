@@ -1,0 +1,5 @@
+Flask
+flask-cors
+reportlab
+beautifulsoup4
+gunicorn
