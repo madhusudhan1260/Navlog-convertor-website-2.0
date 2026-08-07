@@ -34,37 +34,19 @@ from auth import AUTH_CONFIGURED, login_view, require_auth
 
 app = Flask(__name__)
 
-# Only these frontends may call the API from a browser. CORS(app) used to
-# allow every origin, which let any page on the internet drive the backend
-# with a stolen token.
+# Any origin may attempt a request; the session token decides whether it
+# gets an answer.
 #
-# This project's own frontends are listed here rather than left purely to
-# configuration. Deploying the same repo twice produces two Vercel URLs,
-# and pointing ALLOWED_ORIGINS at one of them silently breaks the other —
-# a browser-only failure that never appears in the server logs. Keeping
-# the known origins in code means a rename or a duplicate project cannot
-# take the site down, while the allowlist stays closed: a stolen token is
-# still unusable from any page not named here.
-KNOWN_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://eflightops.vercel.app",
-    "https://navlog-convertor-website-2-0.vercel.app",
-    "https://navlog-convertor-website-2-0-me9x.vercel.app",
-]
-
-# ALLOWED_ORIGINS adds to that list, it does not replace it.
-ALLOWED_ORIGINS = list(dict.fromkeys(
-    KNOWN_ORIGINS + [
-        origin.strip()
-        for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
-        if origin.strip()
-    ]
-))
-
+# An origin allowlist was tried and removed. It has to name every frontend
+# URL exactly, so a renamed or duplicated Vercel project silently breaks
+# the site with a browser-only failure that leaves no trace in the server
+# logs — real operational cost, for very little here. The token lives in
+# sessionStorage, not a cookie, so a browser never attaches it to a
+# cross-site request automatically, and the same-origin policy stops a
+# hostile page reading it. Every route that matters is behind @require_auth
+# regardless of who is asking.
 CORS(
     app,
-    origins=ALLOWED_ORIGINS,
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "OPTIONS"],
 )
