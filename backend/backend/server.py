@@ -34,18 +34,33 @@ from auth import AUTH_CONFIGURED, login_view, require_auth
 
 app = Flask(__name__)
 
-# Only the deployed frontend (and local dev) may call this API from a
-# browser. Previously CORS(app) allowed every origin, so any page on the
-# internet could drive the backend with a stolen token. Comma-separated
-# list; falls back to the Vite dev server.
-ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173"
-    ).split(",")
-    if origin.strip()
+# Only these frontends may call the API from a browser. CORS(app) used to
+# allow every origin, which let any page on the internet drive the backend
+# with a stolen token.
+#
+# This project's own frontends are listed here rather than left purely to
+# configuration. Deploying the same repo twice produces two Vercel URLs,
+# and pointing ALLOWED_ORIGINS at one of them silently breaks the other —
+# a browser-only failure that never appears in the server logs. Keeping
+# the known origins in code means a rename or a duplicate project cannot
+# take the site down, while the allowlist stays closed: a stolen token is
+# still unusable from any page not named here.
+KNOWN_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://eflightops.vercel.app",
+    "https://navlog-convertor-website-2-0.vercel.app",
+    "https://navlog-convertor-website-2-0-me9x.vercel.app",
 ]
+
+# ALLOWED_ORIGINS adds to that list, it does not replace it.
+ALLOWED_ORIGINS = list(dict.fromkeys(
+    KNOWN_ORIGINS + [
+        origin.strip()
+        for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+))
 
 CORS(
     app,
