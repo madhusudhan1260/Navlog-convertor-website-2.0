@@ -29,14 +29,22 @@ PORT = int(
     os.getenv("PORT", 5000)
 )
 
-PUBLIC_URL = os.getenv(
-    "PUBLIC_BASE_URL",
-    f"http://localhost:{PORT}"
+# Base URL the browser uses to fetch a generated PDF, so it has to be the
+# service's PUBLIC address.
+#
+# RENDER_EXTERNAL_URL is injected by Render on every web service and is
+# the full "https://name.onrender.com". Do NOT substitute a blueprint
+# `fromService: property: host` here - that resolves to the bare internal
+# service name ("eflightops-api"), which produced download links pointing
+# at a host that does not exist off-platform.
+PUBLIC_URL = (
+    os.getenv("PUBLIC_BASE_URL")
+    or os.getenv("RENDER_EXTERNAL_URL")
+    or f"http://localhost:{PORT}"
 ).rstrip("/")
 
-# Hosts that inject this value (Render's fromService, for one) supply a
-# bare "name.onrender.com" with no scheme. Left as-is that produces a
-# relative download link and the PDF never resolves, so normalise it.
+# Belt and braces: a hostname supplied without a scheme still has to end
+# up absolute, or the link resolves relative to the frontend's origin.
 if PUBLIC_URL and "://" not in PUBLIC_URL:
     PUBLIC_URL = f"https://{PUBLIC_URL}"
 
