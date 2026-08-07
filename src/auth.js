@@ -36,6 +36,31 @@ export function authHeader() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function describeUnreachable() {
+  const onLocalhost = ["localhost", "127.0.0.1"].includes(location.hostname);
+  const apiIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)\b/.test(API_URL);
+
+  // A deployed site pointing at localhost means the build never received
+  // VITE_API_URL. The browser would be calling the visitor's own machine.
+  if (apiIsLocalhost && !onLocalhost) {
+    return (
+      `This site was built without VITE_API_URL, so it is trying to reach ` +
+      `${API_URL} — your own computer, not the server. Set VITE_API_URL in ` +
+      `the hosting settings and redeploy.`
+    );
+  }
+
+  if (apiIsLocalhost) {
+    return `Cannot reach the backend at ${API_URL}. Is the Flask server running?`;
+  }
+
+  return (
+    `Cannot reach the backend at ${API_URL}. It may be asleep (free tier ` +
+    `services take ~30s to wake — try again), or ALLOWED_ORIGINS on the ` +
+    `server may not include ${location.origin}.`
+  );
+}
+
 /**
  * Exchange credentials for a session token.
  * Returns { ok: true } or { ok: false, error } — never throws for an
@@ -51,7 +76,12 @@ export async function login(email, password) {
       body: JSON.stringify({ email, password }),
     });
   } catch {
-    return { ok: false, error: "Cannot reach the server. Check your connection." };
+    // fetch() rejects for a refused connection, DNS failure, mixed
+    // content AND a blocked CORS preflight, and the browser deliberately
+    // hides which. "Check your connection" sent the reader looking in
+    // the wrong place, so name the URL actually being called and the
+    // configuration mistakes that produce each case.
+    return { ok: false, error: describeUnreachable() };
   }
 
   let body = {};
