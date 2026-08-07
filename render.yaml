@@ -8,13 +8,8 @@ services:
     # server.py guards app.run() behind __main__, so gunicorn imports the
     # module and serves `app` directly — the Flask dev server never starts.
     startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120
-    envVars:
-      # Must be the backend's own public URL: the /convert response embeds
-      # it in the download link the browser follows to fetch the PDF.
-      # Render fills this with a bare hostname (no scheme); server.py
-      # prefixes https:// when it sees one.
-      - key: PUBLIC_BASE_URL
-        fromService:
-          type: web
-          name: eflightops-api
-          property: host
+    # No PUBLIC_BASE_URL here on purpose. The /convert response embeds an
+    # absolute URL in the PDF download link, and Render already injects
+    # RENDER_EXTERNAL_URL with the full public address - server.py reads
+    # that. A `fromService: property: host` override resolves to the bare
+    # internal service name and silently breaks every download.
