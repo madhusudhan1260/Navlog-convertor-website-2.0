@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: eflight-api
+    name: eflightops-api
     runtime: python
     plan: free
     rootDir: backend/backend
@@ -16,5 +16,5 @@ services:
       - key: PUBLIC_BASE_URL
         fromService:
           type: web
-          name: eflight-api
+          name: eflightops-api
           property: host
