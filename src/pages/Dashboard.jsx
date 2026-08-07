@@ -1,5 +1,46 @@
 import { useState } from "react";
 import axios from "axios";
+import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Icons";
+import { API_URL } from "../api";
+
+const FORMATS = [
+  {
+    id: "MLOVE",
+    key: "ML",
+    note: "A4 · OPS flight plan",
+    tips: [
+      "Contingency is fixed at 250 lbs / 0:13",
+      "Endurance drives the RAMP and T/O FUEL times",
+    ],
+  },
+  {
+    id: "DEFAULT",
+    key: "DF",
+    note: "A4 · standard nav log",
+    tips: [
+      "Contingency = higher of 5% trip fuel or 30 min hold",
+      "Max Trip Fuel is operator-supplied",
+    ],
+  },
+  {
+    id: "VTBBD",
+    key: "BD",
+    note: "Letter · cabin crew, min div",
+    tips: [
+      "Cabin crew name and count/weight are printed",
+      "Contingency = higher of 5% trip or 5 min hold",
+    ],
+  },
+  {
+    id: "VTVIK",
+    key: "VK",
+    note: "A4 · dual ATIS blocks",
+    tips: [
+      "Contingency is a flat 5% of trip fuel",
+      "Min Trip Fuel is operator-supplied",
+    ],
+  },
+];
 
 function Dashboard() {
 
@@ -29,6 +70,11 @@ function Dashboard() {
     contingencyFuel: "",
     contingencyTime: "",
 
+    fuel: "",
+    fuelTime: "",
+    fuel1: "",
+    fuel1Time: "",
+
     endurance: "",
 
     icaoFlightPlan: "",
@@ -42,7 +88,6 @@ function Dashboard() {
   const [pdf, setPdf] = useState(null);
 
   const [json, setJson] = useState(null);
-
 
 
   // ================= TEXT INPUT =================
@@ -62,7 +107,6 @@ function Dashboard() {
   }
 
 
-
   // ================= FILE INPUT =================
 
   function updateFile(event) {
@@ -78,7 +122,6 @@ function Dashboard() {
     }));
 
   }
-
 
 
   // ================= PROCESS =================
@@ -156,6 +199,14 @@ function Dashboard() {
 
           contingencyTime: form.contingencyTime,
 
+          fuel: form.fuel,
+
+          fuelTime: form.fuelTime,
+
+          fuel1: form.fuel1,
+
+          fuel1Time: form.fuel1Time,
+
           endurance: form.endurance,
 
           icaoFlightPlan: form.icaoFlightPlan,
@@ -168,7 +219,7 @@ function Dashboard() {
 
       const response = await axios.post(
 
-        "http://localhost:5000/convert",
+        `${API_URL}/convert`,
 
         formData,
 
@@ -188,8 +239,6 @@ function Dashboard() {
 
       setJson(response.data.data);
 
-      alert("✅ OPS FPL Generated Successfully");
-
     }
 
     catch (error) {
@@ -204,303 +253,526 @@ function Dashboard() {
 
   }
 
+
+  // ================= FILE PICKER =================
+
+  function FilePicker({ name, title, required }) {
+
+    const chosen = files[name];
+
+    return (
+
+      <label className={`file-field ${chosen ? "is-set" : ""}`}>
+
+        <div className="file-row">
+
+          <div className="file-icon">{chosen ? <CheckIcon width={17} height={17} /> : <UploadIcon />}</div>
+
+          <div className="file-text">
+            <strong>{title}</strong>
+            <span>{chosen ? chosen.name : "Click to select a ForeFlight .html export"}</span>
+          </div>
+
+          <div className={`file-badge ${!chosen && required ? "req" : ""}`}>
+            {chosen ? "Loaded" : required ? "Required" : "Optional"}
+          </div>
+
+        </div>
+
+        <input
+          type="file"
+          accept=".html,.htm"
+          name={name}
+          onChange={updateFile}
+        />
+
+      </label>
+
+    );
+
+  }
+
+  const crewDone = form.pilotName !== "" || form.callSign !== "";
+  const fuelDone = form.endurance !== "" || form.contingencyFuel !== "";
+  const fplDone = form.icaoFlightPlan !== "";
+
   return (
 
     <div>
 
-      <div className="header">
+      {/* ================= AMBIENT BACKGROUND ================= */}
 
-        <h1>✈ EFLIGHT AI</h1>
-
-        <div>OPS Generator</div>
-
+      <div className="bg-decor" aria-hidden="true">
+        <span className="sheet" />
+        <span className="orb o1" />
+        <span className="orb o2" />
+        <span className="orb o3" />
+        <span className="orb o4" />
+        <span className="orb o5" />
+        <span className="tracks" />
       </div>
 
-      <div className="form-card">
+      {/* ================= HEADER ================= */}
 
-        <h1>Generate OPS Flight Plan</h1>
+      <header className="header">
 
-        <hr />
+        <div className="brand">
 
-        {/* ================= CREW DETAILS ================= */}
+          <div className="brand-mark"><PlaneIcon width={20} height={20} /></div>
 
-        <div className="grid3">
-
-          <input
-            name="callSign"
-            placeholder="Call Sign"
-            value={form.callSign}
-            onChange={update}
-          />
-
-          <input
-            name="pilotName"
-            placeholder="Pilot Name (e.g. CAPT SHREYAS VYAS)"
-            value={form.pilotName}
-            onChange={update}
-          />
-
-          <input
-            name="coPilotName"
-            placeholder="Co-Pilot Name (e.g. CAPT SANSKAR MISHRA)"
-            value={form.coPilotName}
-            onChange={update}
-          />
+          <div>
+            <h1>EFLIGHT AI</h1>
+            <span>Navlog Converter</span>
+          </div>
 
         </div>
 
-        {/* ================= CABIN CREW (VTBBD) ================= */}
+        <div className="header-right">
 
-        <div className="grid2">
+          <div className="header-tag mono">{form.selectedFormat}</div>
 
-          <input
-            name="cabinCrewName"
-            placeholder="Cabin Crew Name (VTBBD only, e.g. MS SHWETA DIWAN)"
-            value={form.cabinCrewName}
-            onChange={update}
-          />
-
-          <input
-            name="ccWeight"
-            placeholder="Cabin Crew Count/Weight (VTBBD only, e.g. 1-187)"
-            value={form.ccWeight}
-            onChange={update}
-          />
+          <div className="header-tag">
+            <span className="dot" />
+            OPS Generator
+          </div>
 
         </div>
 
-        {/* ================= ROUTE DETAILS ================= */}
+      </header>
 
-        <div className="grid3">
+      <div className="page">
 
-          <input
-            name="departure"
-            placeholder="Departure ICAO"
-            value={form.departure}
-            onChange={update}
-          />
+        {/* ================= HERO ================= */}
 
-          <input
-            name="destination"
-            placeholder="Destination ICAO"
-            value={form.destination}
-            onChange={update}
-          />
+        <div className="hero">
 
-          <input
-            name="flightLevel"
-            placeholder="Flight Level"
-            value={form.flightLevel}
-            onChange={update}
-          />
+          <div className="eyebrow">Flight Planning</div>
 
-        </div>
+          <h1>Generate an <em>OPS flight plan</em></h1>
 
-        {/* ================= WEIGHT DETAILS ================= */}
+          <p>
+            Upload your ForeFlight navlog exports, add the crew and fuel figures
+            that ForeFlight doesn't carry, then choose an output format to
+            produce a print-ready operational flight plan.
+          </p>
 
-        <div className="grid3">
+          <div className="hero-stats">
 
-          <input
-            name="paxWeight"
-            placeholder="PAX Weight"
-            value={form.paxWeight}
-            onChange={update}
-          />
+            <div className="stat">
+              <b>4</b>
+              <span>Fleet formats</span>
+            </div>
 
-          <input
-            name="maxTripFuel"
-            placeholder="Max Trip Fuel"
-            value={form.maxTripFuel}
-            onChange={update}
-          />
+            <div className="stat">
+              <b>3</b>
+              <span>Routes per plan</span>
+            </div>
 
-          <input
-            name="endurance"
-            placeholder="Endurance (HH:MM)"
-            value={form.endurance}
-            onChange={update}
-          />
+            <div className="stat">
+              <b>4</b>
+              <span>Pages output</span>
+            </div>
+
+            <div className="stat">
+              <b>A4<span style={{ opacity: 0.55 }}>/</span>LTR</b>
+              <span>Page sizes</span>
+            </div>
+
+          </div>
 
         </div>
 
-        {/* ================= CONTINGENCY FUEL ================= */}
+        <div className="layout">
 
-        <div className="grid3">
+          {/* ================= MAIN COLUMN ================= */}
 
-          <input
-            name="contingencyFuel"
-            placeholder="Contingency Fuel (lbs)"
-            value={form.contingencyFuel}
-            onChange={update}
-          />
+          <main>
 
-          <input
-            name="contingencyTime"
-            placeholder="Contingency Time (H:MM)"
-            value={form.contingencyTime}
-            onChange={update}
-          />
+            {/* ---- 1. CREW ---- */}
 
-        </div>
+            <section className="section c-indigo">
 
-        <br />
+              <div className="section-head">
+                <div className="section-num">01</div>
+                <h2>Crew &amp; Aircraft</h2>
+              </div>
 
-        {/* ================= HTML FILES ================= */}
+              <div className="section-body">
 
-        <h2>ForeFlight HTML Files</h2>
+                <div className="grid3">
 
-        <div className="grid1">
+                  <div className="field">
+                    <label>Call Sign</label>
+                    <input name="callSign" placeholder="VTECG" value={form.callSign} onChange={update} />
+                  </div>
 
-          <label>
-            <strong>Main Route HTML</strong>
+                  <div className="field">
+                    <label>Pilot in Command</label>
+                    <input name="pilotName" placeholder="CAPT SHREYAS VYAS" value={form.pilotName} onChange={update} />
+                  </div>
 
-            <input
-              type="file"
-              accept=".html,.htm"
-              name="mainFile"
-              onChange={updateFile}
-            />
-          </label>
+                  <div className="field">
+                    <label>First Officer</label>
+                    <input name="coPilotName" placeholder="CAPT SANSKAR MISHRA" value={form.coPilotName} onChange={update} />
+                  </div>
 
-        </div>
+                </div>
 
-        <br />
+                <div className="grid2">
 
-        <div className="grid1">
+                  <div className="field">
+                    <label>Cabin Crew Name <span className="opt">VTBBD</span></label>
+                    <input name="cabinCrewName" placeholder="MS SHWETA DIWAN" value={form.cabinCrewName} onChange={update} />
+                  </div>
 
-          <label>
-            <strong>Alternate 1 HTML (Optional)</strong>
+                  <div className="field">
+                    <label>Cabin Crew Count <span className="opt">VTBBD</span></label>
+                    <input name="ccWeight" placeholder="1  →  prints 1 - 187" value={form.ccWeight} onChange={update} />
+                  </div>
 
-            <input
-              type="file"
-              accept=".html,.htm"
-              name="alternate1File"
-              onChange={updateFile}
-            />
-          </label>
+                </div>
 
-        </div>
+              </div>
 
-        <br />
+            </section>
 
-        <div className="grid1">
+            {/* ---- 2. ROUTE ---- */}
 
-          <label>
-            <strong>Alternate 2 HTML (Optional)</strong>
+            <section className="section c-cyan">
 
-            <input
-              type="file"
-              accept=".html,.htm"
-              name="alternate2File"
-              onChange={updateFile}
-            />
-          </label>
+              <div className="section-head">
+                <div className="section-num">02</div>
+                <h2>Route</h2>
+                <span className="hint">Blank = use values parsed from the HTML</span>
+              </div>
 
-        </div>
+              <div className="section-body">
 
-        <br />
+                <div className="grid3">
 
-        {/* ================= ICAO FLIGHT PLAN ================= */}
+                  <div className="field">
+                    <label>Departure ICAO</label>
+                    <input name="departure" placeholder="VIDP" value={form.departure} onChange={update} />
+                  </div>
 
-        <h2>ATC Flight Plan (full ICAO FPL text)</h2>
+                  <div className="field">
+                    <label>Destination ICAO</label>
+                    <input name="destination" placeholder="VECC" value={form.destination} onChange={update} />
+                  </div>
 
-        <textarea
-          name="icaoFlightPlan"
-          placeholder="Paste the full ICAO flight plan, e.g. (FPL-VTECG-IN-C25A/L-...)"
-          value={form.icaoFlightPlan}
-          onChange={update}
-          rows={6}
-        />
+                  <div className="field">
+                    <label>Flight Level</label>
+                    <input name="flightLevel" placeholder="FL450" value={form.flightLevel} onChange={update} />
+                  </div>
 
-        <br />
-        <br />
+                </div>
 
-        {/* ================= FORMAT ================= */}
+              </div>
 
-        <select
-          name="selectedFormat"
-          value={form.selectedFormat}
-          onChange={update}
-        >
+            </section>
 
-          <option value="MLOVE">
-            MLOVE
-          </option>
+            {/* ---- 3. FUEL & WEIGHTS ---- */}
 
-          <option value="DEFAULT">
-            DEFAULT
-          </option>
+            <section className="section c-amber">
 
-          <option value="VTBBD">
-            VTBBD
-          </option>
+              <div className="section-head">
+                <div className="section-num">03</div>
+                <h2>Fuel &amp; Weights</h2>
+                <span className="hint">Not carried by ForeFlight — enter per flight</span>
+              </div>
 
-        </select>
+              <div className="section-body">
 
-        <br />
-        <br />
+                <div className="grid3">
 
-        {/* ================= PROCESS BUTTON ================= */}
+                  <div className="field">
+                    <label>PAX</label>
+                    <input name="paxWeight" placeholder="1  →  prints 1 - 165 on VTBBD" value={form.paxWeight} onChange={update} />
+                  </div>
 
-        <button
-          className="process"
-          onClick={processNavlog}
-          disabled={loading}
-        >
-          {
-            loading
-              ? `✈ Generating ${form.selectedFormat} OPS PDF...`
-              : "🚀 Generate OPS PDF"
-          }
-        </button>
+                  <div className="field">
+                    <label>Max Trip Fuel</label>
+                    <input name="maxTripFuel" placeholder="3329" value={form.maxTripFuel} onChange={update} />
+                  </div>
 
-        <br />
-        <br />
+                  <div className="field">
+                    <label>Endurance</label>
+                    <input name="endurance" placeholder="4:15" value={form.endurance} onChange={update} />
+                  </div>
 
-        {/* ================= DOWNLOAD PDF ================= */}
+                </div>
 
-        {
-          pdf && (
+                <div className="grid2">
 
-            <div className="download-section">
+                  <div className="field">
+                    <label>Contingency Fuel (lbs)</label>
+                    <input name="contingencyFuel" placeholder="250" value={form.contingencyFuel} onChange={update} />
+                  </div>
 
-              <a
-                href={pdf}
-                target="_blank"
-                rel="noreferrer"
-                className="download-btn"
-              >
+                  <div className="field">
+                    <label>Contingency Time</label>
+                    <input name="contingencyTime" placeholder="0:13" value={form.contingencyTime} onChange={update} />
+                  </div>
 
-                📄 Download Generated PDF
+                </div>
 
-              </a>
+                <div className="grid2">
+
+                  <div className="field">
+                    <label>Fuel <span className="opt">+ TRIP</span></label>
+                    <input name="fuel" placeholder="lbs added to TRIP" value={form.fuel} onChange={update} />
+                  </div>
+
+                  <div className="field">
+                    <label>Fuel 1 <span className="opt">+ ALT1</span></label>
+                    <input name="fuel1" placeholder="lbs added to ALT1" value={form.fuel1} onChange={update} />
+                  </div>
+
+                  <div className="field">
+                    <label>Fuel Time <span className="opt">+ TAXI</span></label>
+                    <input name="fuelTime" placeholder="0:10" value={form.fuelTime} onChange={update} />
+                  </div>
+
+                  <div className="field">
+                    <label>Fuel 1 Time <span className="opt">+ ALT1</span></label>
+                    <input name="fuel1Time" placeholder="0:05" value={form.fuel1Time} onChange={update} />
+                  </div>
+
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* ---- 4. FILES ---- */}
+
+            <section className="section c-violet">
+
+              <div className="section-head">
+                <div className="section-num">04</div>
+                <h2>ForeFlight HTML Exports</h2>
+              </div>
+
+              <div className="section-body">
+
+                <div className="grid1">
+
+                  <FilePicker name="mainFile" title="Main Route" required />
+                  <FilePicker name="alternate1File" title="Alternate 1" />
+                  <FilePicker name="alternate2File" title="Alternate 2" />
+
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* ---- 5. ATC FLIGHT PLAN ---- */}
+
+            <section className="section c-teal">
+
+              <div className="section-head">
+                <div className="section-num">05</div>
+                <h2>ATC Flight Plan</h2>
+                <span className="hint">Printed verbatim on the final page</span>
+              </div>
+
+              <div className="section-body">
+
+                <div className="field">
+                  <label>Full ICAO FPL text</label>
+                  <textarea
+                    name="icaoFlightPlan"
+                    placeholder={"(FPL-VTECG-IN\n-C25A/L-SDFGHRWY/LB1\n-VIDP0945\n-N0411F450 DPN V18 ALI G452 LKN R460 CEA\n..."}
+                    value={form.icaoFlightPlan}
+                    onChange={update}
+                    rows={8}
+                  />
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* ---- JSON ---- */}
+
+            {
+              json && (
+
+                <details className="json-block">
+
+                  <summary>Parsed flight data (JSON)</summary>
+
+                  <pre className="json-box">
+                    {JSON.stringify(json, null, 2)}
+                  </pre>
+
+                </details>
+
+              )
+            }
+
+          </main>
+
+          {/* ================= SIDEBAR ================= */}
+
+          <aside className="aside">
+
+            {/* format */}
+
+            <div className="panel">
+
+              <div className="panel-head">Output Format</div>
+
+              <div className="panel-body">
+
+                <div className="format-list">
+
+                  {
+                    FORMATS.map(item => (
+
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`format-option ${form.selectedFormat === item.id ? "active" : ""}`}
+                        onClick={() => setForm(prev => ({ ...prev, selectedFormat: item.id }))}
+                      >
+                        <span className="format-key">{item.key}</span>
+
+                        <span className="format-text">
+                          <strong>{item.id}</strong>
+                          <span>{item.note}</span>
+                        </span>
+                      </button>
+
+                    ))
+                  }
+
+                </div>
+
+              </div>
 
             </div>
 
-          )
-        }
+            {/* generate */}
 
-        <br />
+            <div className="panel">
 
-        {/* ================= JSON OUTPUT ================= */}
+              <div className="panel-head">Generate</div>
 
-        {
-          json && (
+              <div className="panel-body">
 
-            <>
+                <div className="checklist">
 
-              <h2>Generated JSON</h2>
+                  <div className={`check-row ${files.mainFile ? "done" : ""}`}>
+                    <i>{files.mainFile ? "✓" : "1"}</i>
+                    Main route HTML
+                  </div>
 
-              <pre className="json-box">
+                  <div className={`check-row ${crewDone ? "done" : ""}`}>
+                    <i>{crewDone ? "✓" : "2"}</i>
+                    Crew details
+                  </div>
 
-                {JSON.stringify(json, null, 2)}
+                  <div className={`check-row ${fuelDone ? "done" : ""}`}>
+                    <i>{fuelDone ? "✓" : "3"}</i>
+                    Fuel figures
+                  </div>
 
-              </pre>
+                  <div className={`check-row ${fplDone ? "done" : ""}`}>
+                    <i>{fplDone ? "✓" : "4"}</i>
+                    ATC flight plan
+                  </div>
 
-            </>
+                </div>
 
-          )
-        }
+                <div style={{ height: 16 }} />
+
+                <button
+                  className="process"
+                  onClick={processNavlog}
+                  disabled={loading}
+                >
+                  {
+                    loading
+                      ? <>
+                          <span className="spinner" />
+                          Generating…
+                        </>
+                      : <>Generate OPS PDF</>
+                  }
+                </button>
+
+                <div className="action-note">
+                  {
+                    files.mainFile
+                      ? `Ready — ${form.selectedFormat} format`
+                      : "Main route HTML required"
+                  }
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* format notes */}
+
+            <div className="panel">
+
+              <div className="panel-head">
+                {form.selectedFormat} Notes
+              </div>
+
+              <div className="panel-body">
+
+                <ul className="notes">
+                  {
+                    (FORMATS.find(f => f.id === form.selectedFormat)?.tips || [])
+                      .map(tip => <li key={tip}>{tip}</li>)
+                  }
+                  <li>Blank operational fields print as hand-fill lines.</li>
+                </ul>
+
+              </div>
+
+            </div>
+
+            {/* result */}
+
+            {
+              pdf && (
+
+                <div className="result">
+
+                  <div className="result-top">
+
+                    <div className="ok-icon"><CheckIcon width={17} height={17} /></div>
+
+                    <div>
+                      <strong>Plan generated</strong>
+                      <p>{form.selectedFormat} · ready to print</p>
+                    </div>
+
+                  </div>
+
+                  <a
+                    href={pdf}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="download-btn"
+                  >
+                    <DownloadIcon width={16} height={16} />
+                    Download PDF
+                  </a>
+
+                </div>
+
+              )
+            }
+
+          </aside>
+
+        </div>
 
       </div>
 

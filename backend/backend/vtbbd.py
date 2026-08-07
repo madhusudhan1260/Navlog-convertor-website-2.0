@@ -4,6 +4,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+from claude import APPROACH_LANDING_FUEL, APPROACH_LANDING_MINUTES
 from common import (
     OUTPUT_DIRECTORY,
     PAGE,
@@ -271,13 +272,16 @@ def draw_misc_section(pdf, data):
     if flight_rules and not pln_profile.startswith(flight_rules):
         pln_profile = f"{flight_rules} {pln_profile}".strip()
 
+    # Divider lines sit ~5pt clear of the cap-height of the label below
+    # them. Text drawn at baseline Y occupies roughly Y-6 upwards, so a
+    # rule any closer than that cuts straight through the lettering.
     labelled_value(pdf, "PLN PROFILE", pln_profile, 74, 360, 90, 470)
-    line(pdf, 70, 377, 542, 377, 0.7)
+    line(pdf, 70, 373, 542, 373, 0.7)
 
     raw_route = value(misc.get("atcRoute")).upper()
     clean_route = raw_route.replace("ROUTE", "").strip() if raw_route.startswith("ROUTE") else raw_route
     labelled_value(pdf, "ATC ROUTE", clean_route, 72, 384, 56, 470)
-    line(pdf, 70, 401, 542, 401, 0.4)
+    line(pdf, 70, 399, 542, 399, 0.4)
 
 
 def draw_operational_section(pdf, data):
@@ -298,10 +302,10 @@ def draw_operational_section(pdf, data):
         480,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 70, 458, 542, 458, 0.4)
+    line(pdf, 70, 453, 542, 453, 0.4)
 
     labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 72, 464, 78, 455)
-    line(pdf, 70, 505, 542, 505, 0.4)
+    line(pdf, 70, 501, 542, 501, 0.4)
 
     labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 72, 512, 68, 455)
 
@@ -316,7 +320,7 @@ def draw_operational_section(pdf, data):
         480,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 70, 552, 542, 552, 0.4)
+    line(pdf, 70, 547, 542, 547, 0.4)
 
     operation_columns = [
         [("CHOCKS ON", operational.get("chocksOn")), ("CHOCKS OFF", operational.get("chocksOff")), ("BLOCK TIME", operational.get("blockTime"))],
@@ -396,6 +400,29 @@ def draw_alternates(pdf, data):
 # --------------------------------------------------
 
 
+# Approach & landing allowance. Derived from VTBBD's own reference
+# document, where it holds on BOTH legs: the APPROCH AND LAND row prints
+# the final waypoint's REMAINING fuel less exactly 220 lbs, over a fixed
+# 0:06 - main leg 5549 -> 5329, alternate leg 4150 -> 3930. It's an
+# aircraft constant (~2200 lbs/hr at approach power), not something the
+# ForeFlight export carries. The same pair is added onto page 1's TRIP
+# figure, so it is owned by claude.py and imported here rather than
+# being spelled out twice.
+APPROACH_LANDING_TIME = f"0:{APPROACH_LANDING_MINUTES:02d}"
+
+
+def approach_and_land_fuel(rows):
+    """Fuel remaining once the approach and landing at the end of a leg
+    is flown: the last waypoint's REM figure minus the allowance."""
+    for row in reversed(rows or []):
+        remaining = value(row.get("fuelRemaining")).replace(",", "").strip()
+        try:
+            return str(round(float(remaining) - APPROACH_LANDING_FUEL))
+        except (TypeError, ValueError):
+            continue
+    return ""
+
+
 def draw_summary_row(pdf, label, fuel_val, time_val, y):
     """The bold "APPROCH AND LAND" / "MISSED APPROACH" divider rows that
     VTBBD inserts between the main navlog and each alternate's navlog -
@@ -424,15 +451,12 @@ def draw_pages_two_and_three(pdf, data):
     main_result = draw_navlog_rows(pdf, data.get("mainNavlog", []), y, 660)
     y = main_result["y"]
 
-    # "APPROCH AND LAND" / "MISSED APPROACH" running totals. VTBBD's own
-    # source doesn't expose a clean formula for these two figures from
-    # the parsed waypoint data, so this uses REQUIRED fuel/time (the
-    # closest already-computed figure covering "trip + diversion
-    # capability") as a best-effort placeholder - worth checking against
-    # a second real VTBBD flight plan if the exact figures matter.
-    approach_fuel = fuel.get("required")
-    approach_time = find_value(fuel, "requiredEndurance", "required_endurance")
-    y = draw_summary_row(pdf, "APPROCH AND LAND", approach_fuel, approach_time, y)
+    # Fuel state after the arrival at the destination: the main leg's
+    # final REM figure less the approach & landing allowance. The MISSED
+    # APPROACH row below repeats it - in the reference both rows carry
+    # the same figure, since a go-around starts from that same state.
+    approach_fuel = approach_and_land_fuel(data.get("mainNavlog", []))
+    y = draw_summary_row(pdf, "APPROCH AND LAND", approach_fuel, APPROACH_LANDING_TIME, y)
 
     alternate_name = data.get("page1", {}).get("flightInfo", {}).get("alternate1", "")
     alternate_route = data.get("routes", {}).get("alternate1Route", "")
@@ -442,7 +466,7 @@ def draw_pages_two_and_three(pdf, data):
     title_right = f"Route {clean_alt_route}" if clean_alt_route else ""
 
     y = draw_navlog_title(pdf, title_left, title_right, y)
-    y = draw_summary_row(pdf, "MISSED APPROACH", approach_fuel, approach_time, y)
+    y = draw_summary_row(pdf, "MISSED APPROACH", approach_fuel, APPROACH_LANDING_TIME, y)
 
     alternate_result = draw_navlog_rows(pdf, data.get("alternate1Navlog", []), y, 744)
 
@@ -461,9 +485,10 @@ def draw_pages_two_and_three(pdf, data):
     continuation = draw_navlog_rows(pdf, remaining_rows, y, 250)
     y = continuation["y"]
 
-    alt1_fuel = data.get("page1", {}).get("fuel", {}).get("alternate")
-    alt1_time = find_value(data.get("page1", {}).get("fuel", {}), "alternateTime", "alternate_time")
-    y = draw_summary_row(pdf, "APPROCH AND LAND", alt1_fuel, alt1_time, y)
+    # Same again for the diversion leg: alternate 1's final REM figure
+    # less the approach & landing allowance.
+    alt1_approach_fuel = approach_and_land_fuel(data.get("alternate1Navlog", []))
+    y = draw_summary_row(pdf, "APPROCH AND LAND", alt1_approach_fuel, APPROACH_LANDING_TIME, y)
 
     y += 22
     write(pdf, "AIRPORT INFO", PAGE["left"], y, 150, {"size": 8.5, "bold": False, "lineBreak": False})
