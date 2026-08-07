@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PlaneIcon, DocIcon, FuelIcon, RouteIcon } from "../components/Icons";
+import { AUTH_CONFIGURED, checkCredentials, signIn } from "../auth";
 
 function Login() {
 
@@ -20,31 +21,23 @@ function Login() {
       return;
     }
 
-    // eflight mail check
-    if (!email.endsWith("@eflight.com")) {
-      setError("Access is restricted to @eflight.com accounts.");
+    // A missing VITE_AUTH_PASSWORD would otherwise look like a wrong
+    // password, so name the real problem instead.
+    if (!AUTH_CONFIGURED) {
+      setError("Sign-in is not configured on this deployment (VITE_AUTH_PASSWORD is unset).");
       return;
     }
 
-    // already registered user check
-    const savedPassword = localStorage.getItem(email);
-
-    if (savedPassword) {
-
-      if (savedPassword === password) {
-        navigate("/dashboard");
-      }
-      else {
-        setError("Incorrect password. Please try again.");
-      }
-
+    // Single authorised operator. One message for both a wrong address
+    // and a wrong password — telling them which half was right just
+    // hands an attacker a valid username.
+    if (!checkCredentials(email, password)) {
+      setError("Incorrect email or password.");
+      return;
     }
 
-    // first login save password
-    else {
-      localStorage.setItem(email, password);
-      navigate("/dashboard");
-    }
+    signIn();
+    navigate("/dashboard");
 
   };
 
