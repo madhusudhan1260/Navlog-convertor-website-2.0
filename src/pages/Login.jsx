@@ -11,6 +11,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   const handleLogin = async () => {
 
@@ -25,9 +26,19 @@ function Login() {
     // The credential is checked by the backend — this component never
     // sees the real password, so there is nothing here to read out of
     // the bundle.
+    // The backend is on a free tier that sleeps after inactivity, so a
+    // first sign-in can take ~30s to wake it. Without a word of warning
+    // that is indistinguishable from a broken site, and people give up
+    // or hammer the button. Say what is happening once it drags.
     setBusy(true);
+    setSlow(false);
+    const slowTimer = setTimeout(() => setSlow(true), 4000);
+
     const result = await login(email, password);
+
+    clearTimeout(slowTimer);
     setBusy(false);
+    setSlow(false);
 
     if (!result.ok) {
       setError(result.error);
@@ -154,6 +165,13 @@ function Login() {
           <button onClick={handleLogin} disabled={busy}>
             {busy ? "SIGNING IN…" : "SIGN IN"}
           </button>
+
+          {slow && (
+            <p className="waking">
+              Waking the server — it sleeps when idle, so the first sign-in
+              can take up to a minute. Leave this open.
+            </p>
+          )}
 
           <div className="login-foot">
             AUTHORISED PERSONNEL ONLY · EFLIGHT OPS
