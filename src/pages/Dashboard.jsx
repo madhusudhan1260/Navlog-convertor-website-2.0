@@ -42,7 +42,46 @@ const FORMATS = [
       "Min Trip Fuel is operator-supplied",
     ],
   },
+  {
+    id: "VTCSP",
+    key: "CS",
+    note: "Letter · plan time & weight",
+    tips: [
+      "Contingency: 5% of trip fuel, 10% of trip time",
+      "Taxi prints a flat 0:10; Min Trip Fuel = REQUIRED fuel",
+      "Endurance fills the ENDURANCE and XTRA times — leave it blank and both print empty",
+      "First Officer prints as typed; Max Trip Fuel falls back to the tail's own figure",
+    ],
+  },
+  {
+    id: "INDOPACIFIC1",
+    label: "INDO PACIFIC 1",
+    key: "I1",
+    note: "A4 · single alternate",
+    tips: [
+      "Prints the 1 ALT sheet — ALTN1 only, no ALTN2 row",
+      "Upload a second alternate and its row is added rather than dropped",
+      "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+      "Endurance fills the ENDURANCE and XTRA times",
+    ],
+  },
+  {
+    id: "INDOPACIFIC2",
+    label: "INDO PACIFIC 2",
+    key: "I2",
+    note: "A4 · two alternates",
+    tips: [
+      "Prints the 2 ALT sheet — the ALTN2 row is reserved even before the second alternate is uploaded",
+      "Same page-1 layout as INDO PACIFIC 1, shifted down one row from ENDURANCE",
+      "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+      "Endurance fills the ENDURANCE and XTRA times",
+    ],
+  },
 ];
+
+// The wire id has no spaces (it is what the backend dispatches on); the
+// label is what an operator reads.
+const formatLabel = (id) => FORMATS.find((f) => f.id === id)?.label || id;
 
 function Dashboard() {
 
@@ -355,7 +394,7 @@ function Dashboard() {
 
         <div className="header-right">
 
-          <div className="header-tag mono">{form.selectedFormat}</div>
+          <div className="header-tag mono">{formatLabel(form.selectedFormat)}</div>
 
           <div className="header-tag">
             <span className="dot" />
@@ -393,7 +432,7 @@ function Dashboard() {
           <div className="hero-stats">
 
             <div className="stat">
-              <b>4</b>
+              <b>{FORMATS.length}</b>
               <span>Fleet formats</span>
             </div>
 
@@ -674,7 +713,7 @@ function Dashboard() {
                         <span className="format-key">{item.key}</span>
 
                         <span className="format-text">
-                          <strong>{item.id}</strong>
+                          <strong>{item.label || item.id}</strong>
                           <span>{item.note}</span>
                         </span>
                       </button>
@@ -740,7 +779,7 @@ function Dashboard() {
                 <div className="action-note">
                   {
                     files.mainFile
-                      ? `Ready — ${form.selectedFormat} format`
+                      ? `Ready — ${formatLabel(form.selectedFormat)} format`
                       : "Main route HTML required"
                   }
                 </div>
@@ -754,7 +793,7 @@ function Dashboard() {
             <div className="panel">
 
               <div className="panel-head">
-                {form.selectedFormat} Notes
+                {formatLabel(form.selectedFormat)} Notes
               </div>
 
               <div className="panel-body">
@@ -784,7 +823,7 @@ function Dashboard() {
 
                     <div>
                       <strong>Plan generated</strong>
-                      <p>{form.selectedFormat} · ready to print</p>
+                      <p>{formatLabel(form.selectedFormat)} · ready to print</p>
                     </div>
 
                   </div>

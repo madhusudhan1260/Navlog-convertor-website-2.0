@@ -259,6 +259,14 @@ def parse_performance_summary(soup, result):
         if label == "avg wind" and not result["summary"]["averageWinds"]:
             result["summary"]["averageWinds"] = val
 
+        # FIX: "Landing Fuel" is published HERE and nowhere else -
+        # table.fuel-weights has no such row - so parse_fuel_weights()
+        # could never fill it and every template had to fall back to
+        # subtracting trip fuel from takeoff fuel, which rounds
+        # differently to ForeFlight's own figure.
+        elif label == "landing fuel" and not result["fuelWeights"]["landingFuel"]:
+            result["fuelWeights"]["landingFuel"] = strip_unit(val, "lbs")
+
 
 # =====================================================
 # FUEL & WEIGHTS TABLE
@@ -462,9 +470,15 @@ def parse_level_calculations(soup, result):
 
                     delta_match = re.search(r"\(([^)]+)\)", time_text)
                     delta = delta_match.group(1).strip() if delta_match else ""
-                    # Suppress the baseline row's own "(0:00)" delta so it
-                    # prints blank, same as every other zero-delta figure
-                    # elsewhere in this pipeline.
+
+                    # "timeAll" keeps whatever ForeFlight published,
+                    # including a "(0:00)" against the planned level -
+                    # VTCSP's reference prints that zero rather than
+                    # blanking it. "time" keeps the older behaviour of
+                    # suppressing zero deltas, which the other templates
+                    # are laid out around.
+                    time_all = f"({delta})" if delta else ""
+
                     if delta and re.match(r"^[+-]?0:00$", delta):
                         delta = ""
                     time_val = f"({delta})" if delta else ""
@@ -478,6 +492,7 @@ def parse_level_calculations(soup, result):
                         "fl": fl_label,
                         "wc": wc_val,
                         "time": time_val,
+                        "timeAll": time_all,
                         "trip": trip_text
                     })
 

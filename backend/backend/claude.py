@@ -15,7 +15,22 @@ import re
 # NEVER override an explicit user_input figure. Extend as needed.
 AIRCRAFT_FUEL_LIMITS = {
     "VTSRE": {"minTrip": "2845", "maxTrip": "3961"},
+    # VTCSP (C56X): MAX TRIP FUEL taken from the operator's own reference
+    # OPS FPL for this tail. MIN TRIP FUEL is not listed - that template
+    # derives it from REQUIRED fuel per flight.
+    "VTCSP": {"maxTrip": "6175"},
+    "VTBBN": {"maxTrip": "3235"},
 }
+
+
+# VTCSP and INDO PACIFIC 1 are the same document family: the same page-1
+# "PLAN TIME & FUEL" layout, and the same derivation rules behind it (flat
+# taxi time, contingency, MIN TRIP FUEL, TRACK and TOP CLIMB TEMP).
+PLAN_TIME_TEMPLATES = ("VTCSP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2")
+
+# Contingency time on those templates is a tenth of trip time, but never
+# less than five minutes - see the contingency block below.
+CONTINGENCY_MINIMUM_MINUTES = 5
 
 
 # ======================================================
@@ -154,6 +169,10 @@ CC_UNIT_WEIGHT = 187
 # navlog's last REM to print its APPROCH AND LAND row.
 APPROACH_LANDING_FUEL = 220
 APPROACH_LANDING_MINUTES = 6
+
+# The TAXI row on these templates is a flat operator standard, not a
+# derived figure - both reference documents print 0:10.
+FLAT_TAXI_MINUTES = 10
 
 
 def last_value(rows, key):
@@ -311,6 +330,8 @@ def map_level_calculation_row(row):
         "fl": row.get("fl", ""),
         "wc": row.get("wc", ""),
         "time": row.get("time", ""),
+        # ForeFlight's unedited delta, zeros included - see htmlParser.
+        "timeAll": row.get("timeAll", row.get("time", "")),
         "trip": row.get("trip", "")
     }
 
@@ -495,11 +516,34 @@ def convert_with_claude(master_json, template="MLOVE"):
             track = course
             break
 
+    # VTCSP's TRACK is the bearing quoted inside its own WIND figure - its
+    # reference prints "TRACK : 078 DEG" against "12KT HEAD (078°/035)",
+    # and the operator's older VIDP-VECC document pairs "045 DEG" with
+    # "3kt head (045°/017)" the same way. Note that this is the wind's
+    # direction, not the aircraft's track (the first enroute course on that
+    # flight is 124), but it is what this template has always printed, so
+    # it is reproduced here rather than silently corrected. Swap the order
+    # of the last two entries below to print the real course instead.
+    wind_bearing = ""
+    wind_bearing_match = re.search(
+        r"\((\d{2,3})\s*°", str(page1["time"]["averageWinds"] or "")
+    )
+    if wind_bearing_match:
+        wind_bearing = wind_bearing_match.group(1).zfill(3)
+
     page1["time"]["track"] = first(
         user_input.get("track"),
         summary.get("track"),
+        wind_bearing if template in PLAN_TIME_TEMPLATES else "",
         track
     )
+
+    # The winds-aloft column headers are the only place ForeFlight states a
+    # level together with its temperature, already formatted exactly as
+    # "FL nnn (ISA: -nn°C)". The middle band is used by STEP CLIMB below,
+    # and by VTCSP's TOP CLIMB TEMP.
+    main_wind_bands = array(object_(main.get("enrouteWinds")).get("bands"))
+    mid_band = main_wind_bands[len(main_wind_bands) // 2] if main_wind_bands else ""
 
     # TOP CLIMB TEMP
     toc_temp = ""
@@ -511,8 +555,15 @@ def convert_with_claude(master_json, template="MLOVE"):
                 toc_temp = f"{toc_fl} (ISA: {toc_isa})" if toc_isa else toc_fl
             break
 
+    # VTCSP quotes the middle winds-aloft band here, not the TOC waypoint's
+    # own level: its reference prints "FL 390 (ISA: -56°C)" on a flight
+    # whose TOC is FL410 at ISA +7, and FL 390 is the middle of that
+    # export's FL350/370/390/410/450 bands - temperature included, in the
+    # band header's own °C formatting. (The operator's older VIDP-VECC
+    # document shows the same pairing.)
     page1["time"]["topClimbTemp"] = first(
         user_input.get("topClimbTemp"),
+        mid_band if template in PLAN_TIME_TEMPLATES else "",
         toc_temp
     )
 
@@ -525,10 +576,7 @@ def convert_with_claude(master_json, template="MLOVE"):
     # aircraft's ceiling - as it does here - the bands run from several
     # steps below up to the ceiling, and the middle one is the suggested
     # step-climb level). That column header is already formatted exactly
-    # as "FL nnn (ISA: nn°C)", so it can be used as-is.
-    main_wind_bands = array(object_(main.get("enrouteWinds")).get("bands"))
-    mid_band = main_wind_bands[len(main_wind_bands) // 2] if main_wind_bands else ""
-
+    # as "FL nnn (ISA: nn°C)", so it can be used as-is (computed above).
     page1["time"]["stepClimb"] = first(
         user_input.get("stepClimb"),
         mid_band,
@@ -670,13 +718,26 @@ def convert_with_claude(master_json, template="MLOVE"):
             _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
         elif _five_min_fuel is not None:
             _computed_contingency_fuel, _computed_contingency_time = _five_min_fuel, 5
-    elif template == "VTVIK":
-        # VTVIK's own reference labels this row "CONTINGENCY 5%" and its
-        # printed figure (108 lbs on a 2160 lb trip) is exactly 5% of
-        # trip fuel - no "whichever is higher" comparison, unlike
-        # DEFAULT/VTBBD.
+    elif template in ("VTVIK",) + PLAN_TIME_TEMPLATES:
+        # VTVIK's and VTCSP's own references both label this row
+        # "CONTINGENCY 5%" and print exactly 5% of trip fuel (VTVIK: 108
+        # lbs on a 2160 lb trip; VTCSP: 117 lbs on a 2341 lb trip) - no
+        # "whichever is higher" comparison, unlike DEFAULT/VTBBD.
         if _five_pct_fuel is not None:
             _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
+
+        # On these templates the contingency TIME does not track the 5%
+        # fuel figure - it is 10% of trip time, floored at five minutes.
+        # All three of the operator's reference documents agree:
+        #   VTCSP        117 lbs / 0:09 on a 1:32 trip  -> a tenth of 92
+        #   VIDP-VECC     81 lbs / 0:13 on a 2:10 trip  -> a tenth of 130
+        #   INDO PACIFIC  24 lbs / 0:05 on a 0:18 trip  -> the 5 min floor
+        # The XTRA and ENDURANCE rows on each document only add up with it.
+        if template in PLAN_TIME_TEMPLATES and _trip_time_minutes_for_contingency is not None:
+            _computed_contingency_time = max(
+                _trip_time_minutes_for_contingency * 0.10,
+                CONTINGENCY_MINIMUM_MINUTES,
+            )
     else:
         _computed_contingency_fuel, _computed_contingency_time = 250, 13
 
@@ -819,6 +880,14 @@ def convert_with_claude(master_json, template="MLOVE"):
         except (TypeError, ValueError):
             _taxi_time_minutes = None
 
+    # These templates print a flat 10 minutes in the TAXI row rather than
+    # a figure derived from taxi fuel - the references show 0:10 against
+    # and its ENDURANCE line only balances (TRIP + TAXI + CONTINGENCY +
+    # FRES + XTRA + ALTN1 = the operator's total) when taxi is that flat
+    # 10. The operator's "FUEL TIME" still tops it up below.
+    if template in PLAN_TIME_TEMPLATES:
+        _taxi_time_minutes = FLAT_TAXI_MINUTES
+
     # Operator's "FUEL TIME" tops up the taxi time, which then flows into
     # REQ time (and so out of EXTRA time) exactly like the fuel side.
     if _user_fuel_time is not None:
@@ -869,6 +938,12 @@ def convert_with_claude(master_json, template="MLOVE"):
         user_input.get("minTrip"),
         fw.get("minTripFuel"),
         _fuel_limits.get("minTrip"),
+        # VTCSP's reference prints REQUIRED fuel (taxi + trip +
+        # contingency + alternate + final reserve) in this row - the
+        # minimum that legally has to be on board for the trip - rather
+        # than an aircraft-config constant. Only used when the form
+        # supplies nothing.
+        page1["fuel"]["required"] if template in PLAN_TIME_TEMPLATES else "",
         ""
     )
 
@@ -898,10 +973,30 @@ def convert_with_claude(master_json, template="MLOVE"):
     # and not actually the extra-time figure at all). ENDURANCE is really
     # the RAMP row's time (total usable endurance on the ramp); EXTRA time
     # is RAMP time minus REQUIRED time - see the comment above required().
+    # FIX: ENDURANCE drives the RAMP/T-O FUEL/XTRA time columns, and when
+    # the form's Endurance box is left empty they all render blank. The
+    # figure is, however, usually already in the pasted ICAO flight plan -
+    # operators file it as "ENDURANCE 0310" in the RMK/ field - so fall
+    # back to that before giving up.
+    _fpl_text = str(first(
+        user_input.get("icaoFlightPlan"),
+        user_input.get("fullFPL"),
+        user_input.get("icaoFPL"),
+        user_input.get("shortFPL"),
+        ""
+    ))
+    _fpl_endurance_match = re.search(
+        r"\bENDURANCE\s*[:\-]?\s*(\d{1,2}:\d{2}|\d{4})\b", _fpl_text, re.IGNORECASE
+    )
+    _fpl_endurance = minutes_to_hhmm(
+        hhmm_to_minutes(_fpl_endurance_match.group(1))
+    ) if _fpl_endurance_match else ""
+
     page1["fuel"]["enduranceTime"] = first(
         user_input.get("enduranceTime"),
         user_input.get("endurance"),
         summary.get("endurance"),
+        _fpl_endurance,
         ""
     )
     _endurance_minutes = hhmm_to_minutes(page1["fuel"]["enduranceTime"])
@@ -926,10 +1021,21 @@ def convert_with_claude(master_json, template="MLOVE"):
     page1["fuel"]["ramp"] = fw.get("blockFuel")
     page1["fuel"]["rampEndurance"] = minutes_to_hhmm(_endurance_minutes)
 
+    # ForeFlight's own "Flight Fuel" (taxi + trip, block to block). VTCSP
+    # prints this as its BLOCK FUEL figure, distinct from the ramp fuel
+    # it calls COMPUTED FUEL.
+    page1["fuel"]["flight"] = fw.get("flightFuel")
+
     page1["fuel"]["landing"] = subtract_if_complete(
         page1["fuel"]["takeoff"],
         page1["fuel"]["trip"]
     )
+
+    # ForeFlight publishes a landing-fuel figure of its own in the
+    # performance-summary strip. It can differ by a pound or two from the
+    # takeoff-minus-trip subtraction above (rounding), so keep it
+    # separately for templates that quote ForeFlight's number verbatim.
+    page1["fuel"]["landingReported"] = fw.get("landingFuel")
     if not page1["fuel"]["landing"]:
         page1["fuel"]["landing"] = first(
             fw.get("landingFuel"),
