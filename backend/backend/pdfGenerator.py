@@ -616,4 +616,18 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
         from vtvik import generate_vtvik_pdf
         return generate_vtvik_pdf(navlog)
 
+    if prefix == "VTCSP":
+        from vtcsp import generate_vtcsp_pdf
+        return generate_vtcsp_pdf(navlog)
+
+    # INDO PACIFIC's "1 ALT" and "2 ALT" documents share one layout, so
+    # both formats render from the same module - the number in the name
+    # decides whether the ALTN2 row is reserved.
+    if prefix in ("INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2"):
+        from indopacific import generate_indopacific_pdf
+        return generate_indopacific_pdf(
+            navlog,
+            alternates=2 if prefix == "INDOPACIFIC2" else 1,
+        )
+
     return generate_mlove_pdf(navlog)
