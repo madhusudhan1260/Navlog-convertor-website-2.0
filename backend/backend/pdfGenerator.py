@@ -623,6 +623,14 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
     # INDO PACIFIC's "1 ALT" and "2 ALT" documents share one layout, so
     # both formats render from the same module - the number in the name
     # decides whether the ALTN2 row is reserved.
+    if prefix in ("VTKCM", "VTKCM2"):
+        from vtkcm import generate_vtkcm_pdf
+        return generate_vtkcm_pdf(navlog)
+
+    if prefix == "VTJOE":
+        from vtjoe import generate_vtjoe_pdf
+        return generate_vtjoe_pdf(navlog)
+
     if prefix in ("INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2"):
         from indopacific import generate_indopacific_pdf
         return generate_indopacific_pdf(

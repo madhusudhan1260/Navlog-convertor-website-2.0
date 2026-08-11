@@ -77,6 +77,28 @@ const FORMATS = [
       "Endurance fills the ENDURANCE and XTRA times",
     ],
   },
+  {
+    id: "VTJOE",
+    key: "JO",
+    note: "A4 · ATIS & take-off data page",
+    tips: [
+      "Adds a hand-fill DEPARTURE ATIS / TAKE OFF DATA / LANDING DATA page",
+      "FUEL block carries an MDF row (alternate fuel + final reserve)",
+      "Contingency is fixed at 250 lbs / 0:13; taxi time is a flat 0:10",
+      "Endurance fills the REQ, EXTRA, T/O FUEL and RAMP times",
+    ],
+  },
+  {
+    id: "VTKCM",
+    key: "KC",
+    note: "A4 · additional & discretionary",
+    tips: [
+      "Plan block adds an ADDITIONAL row and renames XTRA to DISCRETIONARY",
+      "Additional Fuel / Time are operator-entered; Discretionary is what's left of the extra",
+      "AIRPORT INFO lists the alternates as ALTN1 / ALTN2 rows",
+      "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+    ],
+  },
 ];
 
 // The wire id has no spaces (it is what the backend dispatches on); the
@@ -112,6 +134,8 @@ function Dashboard() {
     maxTripFuel: "",
     contingencyFuel: "",
     contingencyTime: "",
+    additionalFuel: "",
+    additionalTime: "",
 
     fuel: "",
     fuelTime: "",
@@ -242,6 +266,10 @@ function Dashboard() {
           contingencyFuel: form.contingencyFuel,
 
           contingencyTime: form.contingencyTime,
+
+          additionalFuel: form.additionalFuel,
+
+          additionalTime: form.additionalTime,
 
           fuel: form.fuel,
 
@@ -585,6 +613,20 @@ function Dashboard() {
                   <div className="field">
                     <label>Contingency Time</label>
                     <input name="contingencyTime" placeholder="0:13" value={form.contingencyTime} onChange={update} />
+                  </div>
+
+                </div>
+
+                <div className="grid2">
+
+                  <div className="field">
+                    <label>Additional Fuel (lbs) <span className="opt">VTKCM</span></label>
+                    <input name="additionalFuel" placeholder="100" value={form.additionalFuel} onChange={update} />
+                  </div>
+
+                  <div className="field">
+                    <label>Additional Time <span className="opt">VTKCM</span></label>
+                    <input name="additionalTime" placeholder="0:10" value={form.additionalTime} onChange={update} />
                   </div>
 
                 </div>
