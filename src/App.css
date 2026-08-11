@@ -107,10 +107,10 @@
      the only place the field is ever seen and a pale wash there just
      reads as "unstyled grey". */
   background:
-    radial-gradient(1500px 760px at 50% -16%, rgba(147, 197, 253, 0.55), transparent 66%),
-    radial-gradient(1200px 900px at 104% 108%, rgba(167, 139, 250, 0.42), transparent 64%),
-    radial-gradient(1000px 800px at -6% 86%, rgba(45, 212, 191, 0.28), transparent 64%),
-    linear-gradient(172deg, #e8effc 0%, #eef3fb 38%, #f1f0fb 72%, #eaf2fa 100%);
+    radial-gradient(1500px 760px at 50% -16%, rgba(37, 99, 235, 0.38), transparent 66%),
+    radial-gradient(1200px 900px at 104% 108%, rgba(124, 58, 237, 0.34), transparent 64%),
+    radial-gradient(1000px 800px at -6% 86%, rgba(13, 148, 136, 0.26), transparent 64%),
+    linear-gradient(172deg, #070d1e 0%, #060a17 38%, #0a0a1c 72%, #060b18 100%);
 }
 
 /* ---- 1. colour mesh ---- */
@@ -125,31 +125,31 @@
 .bg-decor .o1 {
   width: 46vw; height: 46vw; min-width: 520px; min-height: 520px;
   top: -14%; left: -11%;
-  background: radial-gradient(circle, rgba(79, 70, 229, 0.42), transparent 66%);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.55), transparent 66%);
   animation: drift 26s ease-in-out infinite;
 }
 .bg-decor .o2 {
   width: 42vw; height: 42vw; min-width: 480px; min-height: 480px;
   top: -6%; right: -13%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.44), transparent 66%);
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.46), transparent 66%);
   animation: drift 32s ease-in-out infinite reverse;
 }
 .bg-decor .o3 {
   width: 52vw; height: 52vw; min-width: 560px; min-height: 560px;
   bottom: -20%; left: 16%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.36), transparent 66%);
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.46), transparent 66%);
   animation: drift 38s ease-in-out infinite;
 }
 .bg-decor .o4 {
   width: 34vw; height: 34vw; min-width: 380px; min-height: 380px;
   top: 30%; left: 56%;
-  background: radial-gradient(circle, rgba(244, 114, 182, 0.26), transparent 66%);
+  background: radial-gradient(circle, rgba(244, 114, 182, 0.34), transparent 66%);
   animation: drift 30s ease-in-out infinite reverse;
 }
 .bg-decor .o5 {
   width: 40vw; height: 40vw; min-width: 440px; min-height: 440px;
   bottom: -14%; right: -4%;
-  background: radial-gradient(circle, rgba(45, 212, 191, 0.32), transparent 66%);
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.34), transparent 66%);
   animation: breathe 24s ease-in-out infinite;
 }
 
@@ -203,8 +203,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(30, 58, 138, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30, 58, 138, 0.075) 1px, transparent 1px);
+    linear-gradient(rgba(125, 211, 252, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 211, 252, 0.07) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(120% 100% at 50% 0%, #000 15%, transparent 88%);
   -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 15%, transparent 88%);
@@ -218,7 +218,7 @@
   position: absolute;
   inset: 0;
   background-image:
-    radial-gradient(130% 110% at 50% 50%, transparent 56%, rgba(23, 37, 84, 0.1) 100%),
+    radial-gradient(130% 110% at 50% 50%, transparent 48%, rgba(2, 5, 14, 0.72) 100%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.06'/%3E%3C/svg%3E");
   background-size: cover, 180px 180px;
 }
@@ -555,13 +555,14 @@
   padding: 38px 36px 30px;
   border-radius: var(--r-xl);
   background:
-    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(165deg, rgba(20, 31, 55, 0.94), rgba(11, 18, 35, 0.96)) padding-box,
     linear-gradient(150deg, #7dd3fc, #818cf8 48%, #c084fc) border-box;
+  backdrop-filter: blur(20px) saturate(140%);
   border: 1.5px solid transparent;
   box-shadow:
     0 44px 100px rgba(2, 6, 16, 0.66),
     0 0 70px rgba(99, 102, 241, 0.22),
-    0 2px 0 rgba(255, 255, 255, 0.9) inset;
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -617,15 +618,16 @@
   padding: 13px 15px;
   border-radius: var(--r);
   border: 1.5px solid var(--line-strong);
-  background: linear-gradient(180deg, #fbfcff, #f2f6fd);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.9), rgba(12, 20, 38, 0.9));
+  color: var(--ink-900);
   transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
 }
 
 .login-card input:focus {
   outline: none;
-  background: #fff;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.16);
+  background: rgba(15, 23, 45, 0.96);
+  border-color: #818cf8;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.24), 0 0 26px rgba(99, 102, 241, 0.3);
 }
 
 .login-card button {
@@ -666,9 +668,9 @@
   margin-bottom: 15px;
   padding: 11px 14px;
   font-size: 13px;
-  color: #9f1239;
-  background: linear-gradient(100deg, #fff1f3, #fff7f8);
-  border: 1px solid #fecdd6;
+  color: #ffc2cf;
+  background: linear-gradient(100deg, rgba(159, 18, 57, 0.28), rgba(88, 12, 33, 0.2));
+  border: 1px solid rgba(253, 164, 175, 0.28);
   border-left: 3px solid var(--rose);
   border-radius: var(--r-sm);
   animation: rise 0.3s both;
@@ -782,10 +784,10 @@
   border-radius: var(--r-xl);
   color: #fff;
   background:
-    radial-gradient(700px 300px at 88% 8%, rgba(34, 211, 238, 0.45), transparent 66%),
-    radial-gradient(600px 320px at 4% 100%, rgba(192, 132, 252, 0.5), transparent 66%),
-    linear-gradient(118deg, #1e2a6b 0%, #2b3a8f 38%, #1d4ed8 72%, #0ea5e9 100%);
-  box-shadow: 0 26px 60px rgba(29, 78, 216, 0.34);
+    radial-gradient(700px 300px at 88% 8%, rgba(34, 211, 238, 0.28), transparent 66%),
+    radial-gradient(600px 320px at 4% 100%, rgba(168, 85, 247, 0.32), transparent 66%),
+    linear-gradient(118deg, #0d1430 0%, #141d4a 38%, #17275e 72%, #0d3b53 100%);
+  box-shadow: var(--sh-lg), 0 0 60px rgba(37, 99, 235, 0.18), var(--edge);
   animation: rise 0.55s both;
 }
 
@@ -827,9 +829,9 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   border-radius: 99px;
-  color: #dbeafe;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #c7dbff;
+  background: rgba(148, 174, 214, 0.12);
+  border: 1px solid rgba(148, 174, 214, 0.22);
   backdrop-filter: blur(6px);
 }
 
@@ -868,13 +870,13 @@
 .stat {
   padding: 13px 15px;
   border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.13);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(148, 174, 214, 0.09);
+  border: 1px solid rgba(148, 174, 214, 0.18);
   backdrop-filter: blur(10px);
   transition: transform 0.2s, background 0.2s;
 }
 
-.stat:hover { transform: translateY(-3px); background: rgba(255, 255, 255, 0.2); }
+.stat:hover { transform: translateY(-3px); background: rgba(148, 174, 214, 0.16); }
 
 .stat b {
   display: block;
@@ -917,11 +919,11 @@
   margin-bottom: 18px;
   border-radius: var(--r-lg);
   background:
-    linear-gradient(rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.8)) padding-box,
-    linear-gradient(140deg, var(--accent-line), rgba(255, 255, 255, 0.5) 55%) border-box;
+    linear-gradient(168deg, rgba(19, 29, 51, 0.9), rgba(11, 18, 34, 0.93)) padding-box,
+    linear-gradient(140deg, var(--accent-line), rgba(148, 174, 214, 0.1) 58%) border-box;
   border: 1.5px solid transparent;
-  backdrop-filter: blur(16px) saturate(130%);
-  box-shadow: 0 4px 18px rgba(13, 23, 41, 0.06);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--sh-md), var(--edge);
   overflow: hidden;
   animation: rise 0.5s both;
   transition: box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
@@ -937,8 +939,9 @@
 .section:hover {
   transform: translateY(-3px);
   box-shadow:
-    0 24px 50px rgba(13, 23, 41, 0.13),
-    0 0 34px var(--accent-glow);
+    var(--sh-lg),
+    0 0 46px var(--accent-glow),
+    var(--edge);
 }
 
 /* corner colour bloom */
@@ -962,11 +965,11 @@
   background: linear-gradient(180deg, var(--accent), transparent 88%);
 }
 
-.section.c-indigo { --accent: #6366f1; --accent-soft: rgba(99, 102, 241, 0.12); --accent-line: rgba(99, 102, 241, 0.5);  --accent-glow: rgba(99, 102, 241, 0.2); }
-.section.c-cyan   { --accent: #06b6d4; --accent-soft: rgba(6, 182, 212, 0.12);  --accent-line: rgba(6, 182, 212, 0.5);   --accent-glow: rgba(6, 182, 212, 0.2); }
-.section.c-amber  { --accent: #f59e0b; --accent-soft: rgba(245, 158, 11, 0.15); --accent-line: rgba(245, 158, 11, 0.55); --accent-glow: rgba(245, 158, 11, 0.2); }
-.section.c-violet { --accent: #a855f7; --accent-soft: rgba(168, 85, 247, 0.12); --accent-line: rgba(168, 85, 247, 0.5);  --accent-glow: rgba(168, 85, 247, 0.2); }
-.section.c-teal   { --accent: #14b8a6; --accent-soft: rgba(20, 184, 166, 0.12); --accent-line: rgba(20, 184, 166, 0.5);  --accent-glow: rgba(20, 184, 166, 0.2); }
+.section.c-indigo { --accent: #818cf8; --accent-soft: rgba(99, 102, 241, 0.18); --accent-line: rgba(129, 140, 248, 0.6);  --accent-glow: rgba(99, 102, 241, 0.3); }
+.section.c-cyan   { --accent: #22d3ee; --accent-soft: rgba(6, 182, 212, 0.18);  --accent-line: rgba(34, 211, 238, 0.6);   --accent-glow: rgba(6, 182, 212, 0.3); }
+.section.c-amber  { --accent: #fbbf24; --accent-soft: rgba(245, 158, 11, 0.2); --accent-line: rgba(251, 191, 36, 0.6); --accent-glow: rgba(245, 158, 11, 0.28); }
+.section.c-violet { --accent: #c084fc; --accent-soft: rgba(168, 85, 247, 0.18); --accent-line: rgba(192, 132, 252, 0.6);  --accent-glow: rgba(168, 85, 247, 0.3); }
+.section.c-teal   { --accent: #2dd4bf; --accent-soft: rgba(20, 184, 166, 0.18); --accent-line: rgba(45, 212, 191, 0.6);  --accent-glow: rgba(20, 184, 166, 0.3); }
 
 .section-head {
   position: relative;
@@ -976,7 +979,7 @@
   gap: 13px;
   padding: 16px 22px;
   background: linear-gradient(96deg, var(--accent-soft), rgba(255, 255, 255, 0) 62%);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  border-bottom: 1px solid var(--line);
 }
 
 .section-num {
@@ -989,7 +992,7 @@
   font-weight: 600;
   border-radius: 11px;
   color: #fff;
-  background: linear-gradient(145deg, var(--accent), rgba(30, 41, 59, 0.85));
+  background: linear-gradient(145deg, var(--accent), rgba(10, 16, 32, 0.9));
   box-shadow: 0 8px 18px var(--accent-line), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
@@ -1028,8 +1031,8 @@
   font-size: 9.5px;
   font-weight: 600;
   border-radius: 6px;
-  color: #7c3aed;
-  background: linear-gradient(120deg, rgba(168, 85, 247, 0.2), rgba(99, 102, 241, 0.14));
+  color: #ddc9ff;
+  background: linear-gradient(120deg, rgba(168, 85, 247, 0.34), rgba(99, 102, 241, 0.26));
   text-transform: none;
 }
 
@@ -1037,12 +1040,13 @@
 .field textarea {
   width: 100%;
   padding: 12px 14px;
-  background: linear-gradient(180deg, #fff, #f7faff);
+  background: linear-gradient(180deg, rgba(7, 12, 25, 0.86), rgba(12, 20, 38, 0.86));
+  color: var(--ink-900);
   border: 1.5px solid transparent;
   border-radius: var(--r);
   box-shadow:
     inset 0 0 0 1px var(--line-strong),
-    inset 0 1px 2px rgba(13, 23, 41, 0.035);
+    inset 0 2px 6px rgba(0, 0, 0, 0.35);
   transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
 }
 
@@ -1060,11 +1064,11 @@
 .field input:focus,
 .field textarea:focus {
   outline: none;
-  background: #fff;
+  background: rgba(10, 17, 34, 0.96);
   border-color: var(--accent);
   box-shadow:
     0 0 0 4px var(--accent-soft),
-    0 6px 18px var(--accent-glow),
+    0 8px 26px var(--accent-glow),
     inset 0 0 0 1px var(--accent);
 }
 
@@ -1075,7 +1079,7 @@
 .file-field {
   display: block;
   padding: 15px 18px;
-  background: linear-gradient(180deg, #fff, #f7faff);
+  background: linear-gradient(180deg, rgba(14, 22, 42, 0.7), rgba(9, 15, 30, 0.7));
   border: 1.5px dashed var(--line-strong);
   border-radius: var(--r-md);
   cursor: pointer;
@@ -1084,7 +1088,7 @@
 
 .file-field:hover {
   border-color: var(--accent);
-  background: linear-gradient(110deg, var(--accent-soft), #fff);
+  background: linear-gradient(110deg, var(--accent-soft), rgba(14, 22, 42, 0.85));
   transform: translateY(-3px);
   box-shadow: 0 14px 30px var(--accent-glow);
 }
@@ -1093,9 +1097,9 @@
   border-style: solid;
   border-color: transparent;
   background:
-    linear-gradient(110deg, #eafbf4, #eafaff) padding-box,
+    linear-gradient(110deg, #0d2830 0%, #102434 100%) padding-box,
     linear-gradient(120deg, #34d399, #22d3ee) border-box;
-  box-shadow: 0 10px 26px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 12px 30px rgba(16, 185, 129, 0.24);
 }
 
 .file-row { display: flex; align-items: center; gap: 14px; }
@@ -1107,8 +1111,8 @@
   place-items: center;
   border-radius: 12px;
   color: var(--ink-500);
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(13, 23, 41, 0.1), inset 0 0 0 1px var(--line);
+  background: rgba(9, 15, 30, 0.9);
+  box-shadow: var(--sh-sm), inset 0 0 0 1px var(--line-strong);
   transition: transform 0.2s, background 0.2s, color 0.2s;
 }
 
@@ -1137,17 +1141,17 @@
   border-radius: 99px;
   color: var(--ink-500);
   background: var(--sunken);
-  box-shadow: inset 0 0 0 1px rgba(13, 23, 41, 0.05);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .file-field.is-set .file-badge {
-  color: #047857;
-  background: linear-gradient(110deg, rgba(52, 211, 153, 0.28), rgba(34, 211, 238, 0.2));
+  color: #6ee7b7;
+  background: linear-gradient(110deg, rgba(52, 211, 153, 0.24), rgba(34, 211, 238, 0.18));
 }
 
 .file-badge.req {
-  color: #b45309;
-  background: linear-gradient(110deg, rgba(251, 191, 36, 0.3), rgba(249, 115, 22, 0.2));
+  color: #fcd34d;
+  background: linear-gradient(110deg, rgba(251, 191, 36, 0.22), rgba(249, 115, 22, 0.16));
 }
 
 /* =========================================================
@@ -1165,12 +1169,19 @@
 .panel {
   border-radius: var(--r-lg);
   background:
-    linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.82)) padding-box,
-    linear-gradient(150deg, rgba(129, 140, 248, 0.55), rgba(255, 255, 255, 0.5) 58%) border-box;
+    linear-gradient(168deg, rgba(19, 29, 51, 0.9), rgba(11, 18, 34, 0.93)) padding-box,
+    linear-gradient(150deg, rgba(129, 140, 248, 0.6), rgba(148, 174, 214, 0.1) 58%) border-box;
   border: 1.5px solid transparent;
-  backdrop-filter: blur(16px) saturate(130%);
-  box-shadow: 0 4px 18px rgba(13, 23, 41, 0.06);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--sh-md), var(--edge);
   overflow: hidden;
+  transition: box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panel:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sh-lg), 0 0 38px rgba(99, 102, 241, 0.16), var(--edge);
 }
 
 .panel-head {
@@ -1182,9 +1193,9 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #3730a3;
-  background: linear-gradient(100deg, rgba(129, 140, 248, 0.18), rgba(34, 211, 238, 0.1) 65%, transparent);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  color: #c7d2fe;
+  background: linear-gradient(100deg, rgba(129, 140, 248, 0.24), rgba(34, 211, 238, 0.12) 65%, transparent);
+  border-bottom: 1px solid var(--line);
 }
 
 .panel-body { padding: 16px 18px 18px; }
@@ -1200,23 +1211,24 @@
   text-align: left;
   border-radius: var(--r-md);
   border: 1.5px solid var(--line-strong);
-  background: #fff;
+  background: rgba(10, 17, 33, 0.72);
   transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
 .format-option:hover {
   border-color: #818cf8;
+  background: rgba(30, 41, 74, 0.8);
   transform: translateX(3px);
-  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.16);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.3);
 }
 
 /* padding-box layer stays OPAQUE so the border gradient can't bleed through */
 .format-option.active {
   border-color: transparent;
   background:
-    linear-gradient(102deg, #eef3ff, #f8f0ff) padding-box,
+    linear-gradient(102deg, #1a2547 0%, #221e4b 55%, #2a1f47 100%) padding-box,
     linear-gradient(120deg, #38bdf8, #6366f1 50%, #c084fc) border-box;
-  box-shadow: 0 14px 30px rgba(99, 102, 241, 0.24);
+  box-shadow: 0 16px 36px rgba(99, 102, 241, 0.38);
 }
 
 .format-key {
@@ -1265,7 +1277,7 @@
   color: var(--ink-400);
   background: var(--sunken);
   border: 1px solid var(--line-strong);
-  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .check-row.done { color: var(--ink-900); font-weight: 550; }
@@ -1348,10 +1360,10 @@
   padding: 17px 18px;
   border-radius: var(--r-lg);
   background:
-    linear-gradient(135deg, #eafbf4, #eaf9ff) padding-box,
+    linear-gradient(135deg, #0e2a2f 0%, #10263c 60%, #171f43 100%) padding-box,
     linear-gradient(135deg, #34d399, #22d3ee 60%, #818cf8) border-box;
   border: 1.5px solid transparent;
-  box-shadow: 0 18px 40px rgba(16, 185, 129, 0.22);
+  box-shadow: 0 20px 46px rgba(16, 185, 129, 0.3), var(--edge);
   animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -1401,12 +1413,12 @@
   margin-top: 18px;
   border-radius: var(--r-lg);
   background:
-    linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.84)) padding-box,
-    linear-gradient(150deg, rgba(129, 140, 248, 0.5), rgba(255, 255, 255, 0.5) 58%) border-box;
+    linear-gradient(168deg, rgba(19, 29, 51, 0.9), rgba(11, 18, 34, 0.93)) padding-box,
+    linear-gradient(150deg, rgba(129, 140, 248, 0.55), rgba(148, 174, 214, 0.1) 58%) border-box;
   border: 1.5px solid transparent;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
   overflow: hidden;
-  box-shadow: 0 4px 18px rgba(13, 23, 41, 0.06);
+  box-shadow: var(--sh-md), var(--edge);
 }
 
 .json-block summary {
@@ -1418,7 +1430,7 @@
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #3730a3;
+  color: #c7d2fe;
   cursor: pointer;
   user-select: none;
   transition: background 0.16s;
@@ -1448,8 +1460,8 @@
   background:
     radial-gradient(700px 240px at 0% 0%, rgba(129, 140, 248, 0.28), transparent 68%),
     radial-gradient(500px 200px at 100% 100%, rgba(34, 211, 238, 0.16), transparent 70%),
-    #0b1224;
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
+    #05091a;
+  border-top: 1px solid var(--line);
 }
 
 /* =========================================================
@@ -1476,8 +1488,13 @@
 }
 
 @media (max-width: 620px) {
-  .header { padding: 12px 18px; }
+  .header { padding: 12px 18px; gap: 10px; }
   .header-tag.mono { display: none; }
+  /* the brand subtitle and the status pill both wrap onto two lines at
+     this width, which pushes the bar to double height */
+  .brand span { display: none; }
+  .header-right .header-tag:not(.as-button) { display: none; }
+  .header-tag { white-space: nowrap; }
   .grid2, .grid3 { grid-template-columns: 1fr; }
   .section-head { padding: 14px 16px; }
   .section-head .hint { display: none; }
@@ -1504,9 +1521,463 @@
   margin-top: 12px;
   padding: 10px 12px;
   border-left: 2px solid var(--blue-400, #60a5fa);
-  background: rgba(96, 165, 250, 0.09);
+  background: rgba(96, 165, 250, 0.14);
   border-radius: 0 8px 8px 0;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--ink-600, #46587a);
+}
+
+/* =========================================================
+   11. MOTION LAYER
+   ---------------------------------------------------------
+   Everything here is either an entrance (played once, `both`
+   so the element is never visible in its pre-state) or an
+   ambient loop on a pseudo-element. Nothing loops on an
+   element that also carries an entrance animation, because a
+   second `animation` declaration would replace the first.
+
+   The reduced-motion block at the top of this file collapses
+   every duration below, so no rule here needs its own guard.
+   ========================================================= */
+
+/* ---- keyframes ---- */
+
+/* spring entrance for things that "arrive" — result card, tick marks */
+@keyframes pop-in {
+  0%   { opacity: 0; transform: scale(0.86) translateY(10px); }
+  60%  { opacity: 1; transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* breathing halo behind the selected format / primary button */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 16px 36px rgba(99, 102, 241, 0.34), 0 0 0 0 rgba(129, 140, 248, 0.35); }
+  50%      { box-shadow: 0 18px 42px rgba(99, 102, 241, 0.46), 0 0 0 7px rgba(129, 140, 248, 0); }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* slow pan across a multi-stop gradient */
+@keyframes bg-pan {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* the ok-icon settling in */
+@keyframes stamp {
+  0%   { opacity: 0; transform: scale(0.4) rotate(-22deg); }
+  70%  { opacity: 1; transform: scale(1.12) rotate(4deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* ---- shell ---- */
+
+.header { animation: slide-down 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+.brand-mark { animation: float-y 5s ease-in-out infinite; }
+
+/* halo that keeps breathing behind the mark */
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 18px;
+  background: inherit;
+  filter: blur(15px);
+  opacity: 0.5;
+  z-index: -1;
+  animation: breathe 6s ease-in-out infinite;
+}
+
+.header-tag { transition: background 0.2s, border-color 0.2s, transform 0.2s; }
+.header-tag:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.32); }
+
+/* ---- hero ---- */
+
+/* the gloss strip was static; send it across on a long loop */
+.hero::before { animation: sheen 9s ease-in-out infinite; }
+
+/* and let the colour field drift underneath it */
+.hero {
+  background-size: auto, auto, 220% 220%;
+  animation: rise 0.55s both, bg-pan 22s ease-in-out infinite 0.55s;
+}
+
+.hero h1 { animation: rise 0.6s 0.1s both; }
+.hero > p { animation: rise 0.6s 0.16s both; }
+.eyebrow  { animation: rise 0.6s 0.05s both; }
+
+.stat { animation: rise 0.5s both; }
+.stat:nth-child(1) { animation-delay: 0.2s; }
+.stat:nth-child(2) { animation-delay: 0.26s; }
+.stat:nth-child(3) { animation-delay: 0.32s; }
+.stat:nth-child(4) { animation-delay: 0.38s; }
+
+.stat:hover {
+  transform: translateY(-4px) scale(1.015);
+  box-shadow: 0 18px 34px rgba(2, 6, 20, 0.5);
+}
+
+/* ---- section rails + fields ---- */
+
+/* a light runs down each card's accent rail as it lands */
+.section::before { overflow: hidden; }
+
+.section::after { transition: opacity 0.35s; }
+.section:hover::after { opacity: 1; }
+
+.section-head { transition: background 0.3s; }
+
+.section-num { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s; }
+.section:hover .section-num {
+  transform: rotate(-6deg) scale(1.08);
+  box-shadow: 0 12px 26px var(--accent-line), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* fields fade up behind their card, staggered across the grid */
+.section-body .field { animation: rise 0.45s both; }
+.section-body .grid2 .field:nth-child(2),
+.section-body .grid3 .field:nth-child(2) { animation-delay: 0.06s; }
+.section-body .grid3 .field:nth-child(3) { animation-delay: 0.12s; }
+
+.field label { transition: color 0.2s; }
+.field:focus-within label { color: var(--accent); }
+
+/* ---- file pickers ---- */
+
+.file-field.is-set { animation: pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.file-field.is-set .file-icon { animation: stamp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.file-field:active { transform: translateY(-1px) scale(0.996); }
+
+/* ---- sidebar ---- */
+
+.format-option { animation: rise 0.4s both; }
+.format-option:nth-child(1) { animation-delay: 0.04s; }
+.format-option:nth-child(2) { animation-delay: 0.08s; }
+.format-option:nth-child(3) { animation-delay: 0.12s; }
+.format-option:nth-child(4) { animation-delay: 0.16s; }
+.format-option:nth-child(5) { animation-delay: 0.20s; }
+.format-option:nth-child(6) { animation-delay: 0.24s; }
+.format-option:nth-child(7) { animation-delay: 0.28s; }
+.format-option:nth-child(8) { animation-delay: 0.32s; }
+.format-option:nth-child(9) { animation-delay: 0.36s; }
+
+.format-option:active { transform: translateX(3px) scale(0.985); }
+
+/* the selected format keeps a slow halo so the choice stays obvious */
+.format-option.active { animation: glow-pulse 3.2s ease-in-out infinite; }
+.format-option.active .format-key { animation: float-y 3.6s ease-in-out infinite; }
+
+.format-key { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.format-option:hover .format-key { transform: scale(1.07) rotate(-4deg); }
+
+.check-row.done i { animation: pop-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.notes li { animation: fade 0.4s both; }
+.notes li:nth-child(2) { animation-delay: 0.05s; }
+.notes li:nth-child(3) { animation-delay: 0.1s; }
+.notes li:nth-child(4) { animation-delay: 0.15s; }
+.notes li:nth-child(5) { animation-delay: 0.2s; }
+
+.process:not(:disabled) { animation: glow-pulse 3.6s ease-in-out infinite; }
+.process:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+
+/* ---- result ---- */
+
+.result { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.result .ok-icon { animation: stamp 0.55s 0.1s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.download-btn:active { transform: translateY(0) scale(0.99); }
+
+/* ---- json viewer ---- */
+
+.json-block[open] .json-box { animation: fade 0.35s both; }
+
+/* ---- login ---- */
+
+.login-card .plane { animation: float-y 5s ease-in-out infinite; }
+.login-card h2 { animation: rise 0.5s 0.1s both; }
+.login-card .sub { animation: rise 0.5s 0.16s both; }
+.login-field { animation: rise 0.5s both; }
+.login-field:nth-of-type(2) { animation-delay: 0.06s; }
+.login-card button { animation: rise 0.5s 0.22s both; }
+.hero-point { animation: rise 0.55s both; }
+.hero-point:nth-child(2) { animation-delay: 0.08s; }
+.hero-point:nth-child(3) { animation-delay: 0.16s; }
+.hero-formats span { animation: fade 0.5s both; }
+
+/* ---- keyboard focus ----
+   Pointer users get the hover treatments above; keyboard users need a
+   ring that survives on a dark field. */
+:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* The format chip row grew with the fleet; deal them in one at a time. */
+.hero-formats span:nth-child(1) { animation-delay: 0.30s; }
+.hero-formats span:nth-child(2) { animation-delay: 0.35s; }
+.hero-formats span:nth-child(3) { animation-delay: 0.40s; }
+.hero-formats span:nth-child(4) { animation-delay: 0.45s; }
+.hero-formats span:nth-child(5) { animation-delay: 0.50s; }
+.hero-formats span:nth-child(6) { animation-delay: 0.55s; }
+.hero-formats span:nth-child(7) { animation-delay: 0.60s; }
+.hero-formats span:nth-child(8) { animation-delay: 0.65s; }
+.hero-formats span:nth-child(9) { animation-delay: 0.70s; }
+
+/* =========================================================
+   12. AEROSPACE LAYER
+   ---------------------------------------------------------
+   Motion borrowed from the instruments this tool feeds:
+   traffic tracking great-circle routes with contrails, a
+   radar scope sweeping the field, navaid beacons pulsing on
+   station, and a sequenced approach-light bar under the hero.
+
+   All of it is transform/opacity only, on pointer-events:none
+   layers behind the app, and the reduced-motion guard at the
+   top of the file stills every bit of it.
+   ========================================================= */
+
+/* ---- traffic ---- */
+
+/* One aircraft per layer, following its own great-circle arc.
+   offset-rotate keeps the nose pointed along the track, which is
+   also what carries the contrail round with it. */
+@keyframes fly {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
+}
+
+/* fades in after departure and out before the far edge, so aircraft
+   never pop into existence mid-screen */
+@keyframes fly-fade {
+  0%, 4%    { opacity: 0; }
+  12%, 88%  { opacity: 1; }
+  97%, 100% { opacity: 0; }
+}
+
+.flight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.flight i {
+  position: absolute;
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+  background: no-repeat center/contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M22 12 13.5 13.9 9.6 21h-2l2-7.6-4.4.6-1.7 2.3H2l1.6-4.3L2 7.7h1.5l1.7 2.3 4.4.6-2-7.6h2l3.9 7.1z' fill='%23bfe0ff'/%3E%3C/svg%3E");
+  offset-rotate: auto;
+  animation:
+    fly 1s linear infinite,
+    fly-fade 1s linear infinite;
+  will-change: offset-distance;
+  filter: drop-shadow(0 0 6px rgba(125, 211, 252, 0.85));
+}
+
+/* the contrail: a tapered streak left behind the tail */
+.flight i::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 120px;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: linear-gradient(270deg, rgba(191, 224, 255, 0.55), rgba(191, 224, 255, 0));
+}
+
+/* Where the traffic flies.
+   The two busy tracks sit INSIDE the hero: it is the one panel that is
+   always on screen and never covered, so an aircraft crossing it is
+   actually seen. The ambient field behind the cards keeps a single
+   high-altitude track for the gutters. Paths are plain px, sized to the
+   band they cross. */
+.hero .flight {
+  z-index: 0;          /* under the copy, over the hero's own gradient */
+}
+
+/* Departure climb-out, kept to the empty right half so it never tracks
+   across the paragraph. */
+.hero .flight.f1 i {
+  offset-path: path("M 600 335 C 900 265 1120 205 1460 85");
+  animation-duration: 26s, 26s;
+}
+
+/* High-altitude overflight along the top of the band. */
+.hero .flight.f2 i {
+  offset-path: path("M -80 118 C 340 42 820 68 1460 -14");
+  animation-duration: 52s, 52s;
+  animation-delay: -19s, -19s;
+}
+
+/* Short final: a level track just above the approach lights, running
+   the full width under the stat row. */
+.hero .flight.f4 i {
+  offset-path: path("M -80 322 C 360 316 900 312 1460 302");
+  animation-duration: 44s, 44s;
+  animation-delay: -30s, -30s;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+}
+
+.hero .flight.f4 i::after { width: 88px; }
+
+.flight.f1 i {
+  offset-path: path("M -120 640 C 380 430 900 400 1720 170");
+  animation-duration: 34s, 34s;
+}
+
+/* Sized rather than scaled: the `scale` property composes with the
+   transform offset-path generates, so scaling an aircraft down also
+   drags it back along its own route towards the origin. */
+.flight.f2 i {
+  offset-path: path("M -120 250 C 340 90 1020 150 1720 -40");
+  animation-duration: 52s, 52s;
+  animation-delay: -14s, -14s;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+}
+
+.flight.f2 i::after { width: 92px; }
+
+.flight.f3 i {
+  offset-path: path("M 1720 820 C 1160 700 520 760 -120 560");
+  animation-duration: 68s, 68s;
+  animation-delay: -40s, -40s;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  filter: drop-shadow(0 0 5px rgba(125, 211, 252, 0.6));
+}
+
+.flight.f3 i::after { width: 74px; opacity: 0.75; }
+
+/* ---- radar scope on the dashboard field ---- */
+
+/* Same instrument as the login page, pushed into the corner and dimmed
+   so it reads as an instrument on the horizon, not a feature. */
+.bg-decor .radar {
+  left: 82%;
+  top: 26%;
+  width: 620px;
+  height: 620px;
+  opacity: 0.5;
+}
+
+/* ---- navaid beacons ---- */
+
+@keyframes beacon {
+  0%   { transform: scale(0.6); opacity: 0; }
+  18%  { opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+.navaid {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: rgba(125, 211, 252, 0.85);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+}
+
+/* the expanding ring, i.e. the station's own sweep */
+.navaid::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(125, 211, 252, 0.7);
+  animation: beacon 3.4s ease-out infinite;
+}
+
+.navaid.n1 { left: 17%; top: 62%; }
+.navaid.n2 { left: 58%; top: 34%; animation-delay: -1.1s; }
+.navaid.n2::after { animation-delay: -1.1s; }
+.navaid.n3 { left: 88%; top: 74%; animation-delay: -2.2s; }
+.navaid.n3::after { animation-delay: -2.2s; }
+
+/* ---- sequenced approach lights under the hero ---- */
+
+/* The "rabbit": a strobe running along the bar towards the threshold,
+   the way the approach lighting sequences on short final. */
+@keyframes rabbit {
+  0%        { transform: translateX(-14%); opacity: 0; }
+  8%        { opacity: 1; }
+  62%       { opacity: 1; }
+  75%, 100% { transform: translateX(114%); opacity: 0; }
+}
+
+.runway {
+  position: absolute;
+  left: 34px;
+  right: 34px;
+  bottom: 13px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
+  /* the fixed light bars themselves */
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(191, 224, 255, 0.34) 0 10px,
+    transparent 10px 26px
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+/* the strobe travelling along them */
+.runway::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 16%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(214, 240, 255, 0.95), transparent);
+  filter: blur(0.4px);
+  animation: rabbit 2.8s cubic-bezier(0.4, 0, 0.9, 0.4) infinite;
+}
+
+/* ---- data-readout sweep on the format tag ---- */
+
+.header-tag.mono {
+  position: relative;
+  overflow: hidden;
+}
+
+.header-tag.mono::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(191, 224, 255, 0.3), transparent);
+  animation: sheen 6s ease-in-out infinite;
+}
+
+/* Traffic and the scope are scenery for a wide window; on a phone they
+   crowd the content and cost frames for nothing. */
+@media (max-width: 860px) {
+  .flight, .bg-decor .radar, .navaid { display: none; }
 }

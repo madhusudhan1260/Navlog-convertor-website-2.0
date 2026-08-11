@@ -70,6 +70,8 @@ function Login() {
       <span className="stars" aria-hidden="true" />
       <span className="radar" aria-hidden="true" />
       <span className="tracks" aria-hidden="true" />
+      <span className="flight f1" aria-hidden="true"><i /></span>
+      <span className="flight f3" aria-hidden="true"><i /></span>
       <span className="grain" aria-hidden="true" />
 
       {/* ---------- LEFT : PITCH ---------- */}
@@ -96,7 +98,7 @@ function Login() {
 
           <div className="hero-point">
             <i><DocIcon /></i>
-            Print-ready OPS flight plans in four fleet formats
+            Print-ready OPS flight plans in nine fleet formats
           </div>
 
           <div className="hero-point">
@@ -116,6 +118,11 @@ function Login() {
           <span>DEFAULT</span>
           <span>VTBBD</span>
           <span>VTVIK</span>
+          <span>VTCSP</span>
+          <span>INDO PACIFIC 1</span>
+          <span>INDO PACIFIC 2</span>
+          <span>VTJOE</span>
+          <span>VTKCM</span>
         </div>
 
       </section>
