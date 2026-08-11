@@ -338,7 +338,32 @@ function Dashboard() {
 
       console.error(error);
 
-      alert("Conversion Failed");
+      // A blanket "Conversion Failed" hides the one thing worth knowing.
+      // The backend already answers a failed /convert with
+      // {success: false, message: "<the actual exception>"}, so surface
+      // that; a session that has quietly expired gets its own wording
+      // because the fix is to sign in again, not to change the navlog.
+      const status = error?.response?.status;
+      const backendMessage = error?.response?.data?.message;
+
+      let detail;
+
+      if (status === 401) {
+        detail = "Your session has expired. Sign in again and retry.";
+      }
+      else if (backendMessage) {
+        detail = backendMessage;
+      }
+      else if (error?.message === "Network Error") {
+        detail =
+          `Could not reach the backend at ${API_URL}. ` +
+          "Check that the Flask server is running.";
+      }
+      else {
+        detail = error?.message || "Unknown error.";
+      }
+
+      alert(`Conversion Failed\n\n${detail}`);
 
     }
 
@@ -403,6 +428,11 @@ function Dashboard() {
         <span className="orb o4" />
         <span className="orb o5" />
         <span className="tracks" />
+        <span className="radar" />
+        <span className="navaid n1" />
+        <span className="navaid n2" />
+        <span className="navaid n3" />
+        <span className="flight f3"><i /></span>
       </div>
 
       {/* ================= HEADER ================= */}
@@ -446,6 +476,11 @@ function Dashboard() {
         {/* ================= HERO ================= */}
 
         <div className="hero">
+
+          <span className="flight f1" aria-hidden="true"><i /></span>
+          <span className="flight f2" aria-hidden="true"><i /></span>
+          <span className="flight f4" aria-hidden="true"><i /></span>
+          <span className="runway" aria-hidden="true" />
 
           <div className="eyebrow">Flight Planning</div>
 
