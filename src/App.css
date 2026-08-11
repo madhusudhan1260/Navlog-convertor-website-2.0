@@ -1981,3 +1981,304 @@
 @media (max-width: 860px) {
   .flight, .bg-decor .radar, .navaid { display: none; }
 }
+
+/* =========================================================
+   13. INSTRUMENT LAYER
+   ---------------------------------------------------------
+   Motion attached to the things the operator actually does:
+   picking a format, waiting for a conversion, scrolling the
+   form. Each piece is tied to a real state change, so it
+   reads as feedback rather than decoration.
+
+   Pseudo-element budget: every selector below either owns
+   both its pseudos or takes the one section 11/12 left free.
+   Nothing here re-declares an `animation` that an earlier
+   section already set on the same element.
+   ========================================================= */
+
+/* ---- departure board: the format tag flips when it changes ----
+   The tag is keyed on the format id in Dashboard.jsx, so React
+   remounts the span and the animation replays on every switch. */
+
+@keyframes flap-in {
+  0%   { transform: rotateX(-90deg); opacity: 0; }
+  55%  { transform: rotateX(14deg);  opacity: 1; }
+  78%  { transform: rotateX(-7deg); }
+  100% { transform: none; opacity: 1; }
+}
+
+.header-tag.mono { perspective: 260px; }
+
+.header-tag.mono .flap {
+  display: inline-block;
+  transform-origin: 50% 0;
+  animation: flap-in 0.5s cubic-bezier(0.3, 1.25, 0.5, 1) both;
+}
+
+/* ---- scroll progress along the header's bottom edge ----
+   Driven by the document's own scroll timeline, so it costs no
+   scroll listener and never falls behind the frame. Duration is
+   deliberately left auto: the reduced-motion guard at the top of
+   this file rewrites `animation-duration`, which for a scroll
+   timeline would collapse the whole bar into the first pixel of
+   travel — hence the no-preference gate rather than relying on it. */
+
+@keyframes scroll-progress { to { transform: scaleX(1); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    .header::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 2px;
+      transform: scaleX(0);
+      transform-origin: 0 50%;
+      background: linear-gradient(90deg, #38bdf8, #818cf8 52%, #c084fc);
+      box-shadow: 0 0 12px rgba(129, 140, 248, 0.85);
+      animation: scroll-progress linear both;
+      animation-timeline: scroll(root block);
+    }
+  }
+}
+
+/* ---- the conversion, flown as a leg ----
+   Replaces the checklist while /convert is in flight. The strip
+   is the one place the operator is genuinely waiting, so it gets
+   the most literal instrument on the page: a leg from departure
+   to destination with the stages ticking off underneath. */
+
+.flightstrip { animation: fade 0.32s both; }
+
+.fs-route {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 16px;
+}
+
+.fs-node {
+  padding: 5px 9px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--ink-600);
+  border-radius: 7px;
+  background: var(--sunken);
+  border: 1px solid var(--line-strong);
+}
+
+.fs-node.arr { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.42); }
+
+/* the leg itself: dashed track, painted over by the flown portion */
+.fs-line {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(148, 174, 214, 0.45) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+@keyframes leg-fill { 0% { width: 0; } 100% { width: 100%; } }
+
+.fs-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.75);
+  animation: leg-fill 3.6s cubic-bezier(0.45, 0, 0.5, 1) infinite;
+}
+
+/* Rotation is the climb-out and level-off, so the nose actually
+   follows the profile instead of sliding along flat. */
+@keyframes leg-fly {
+  0%        { left: 0;    transform: translateY(0) rotate(-9deg); }
+  16%       { transform: translateY(-3px) rotate(-5deg); }
+  80%       { transform: translateY(0) rotate(0deg); }
+  100%      { left: 100%; transform: translateY(0) rotate(5deg); }
+}
+
+.fs-plane {
+  position: absolute;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+  background: no-repeat center/contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M22 12 13.5 13.9 9.6 21h-2l2-7.6-4.4.6-1.7 2.3H2l1.6-4.3L2 7.7h1.5l1.7 2.3 4.4.6-2-7.6h2l3.9 7.1z' fill='%23dbeeff'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 0 7px rgba(125, 211, 252, 0.95));
+  animation: leg-fly 3.6s cubic-bezier(0.45, 0, 0.5, 1) infinite;
+}
+
+/* stage list */
+
+.fs-stages { display: grid; gap: 10px; }
+
+.fs-stage {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 12.5px;
+  color: var(--ink-400);
+  transition: color 0.3s;
+}
+
+.fs-stage i {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--sunken);
+  border: 1px solid var(--line-strong);
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+}
+
+.fs-stage.done { color: var(--ink-600); }
+
+.fs-stage.done i {
+  background: var(--emerald);
+  border-color: transparent;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+}
+
+@keyframes ping-cyan {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.55); }
+  70%      { box-shadow: 0 0 0 7px rgba(56, 189, 248, 0); }
+}
+
+.fs-stage.live { color: var(--ink-900); font-weight: 600; }
+
+.fs-stage.live i {
+  background: #38bdf8;
+  border-color: transparent;
+  animation: ping-cyan 1.5s ease-out infinite;
+}
+
+/* ---- selected format: one light sweeps the chip on selection ----
+   Same sheen the primary button uses, so a selection reads as the
+   same kind of event as a submit. */
+
+.format-option.active { overflow: hidden; }
+
+.format-option.active::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 42%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(191, 224, 255, 0.28), transparent);
+  animation: sheen 5.5s ease-in-out infinite 0.2s;
+}
+
+/* ---- download: the one control that ends the job ---- */
+
+@keyframes arrow-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(2.5px); }
+}
+
+.download-btn { position: relative; overflow: hidden; }
+
+.download-btn svg { animation: arrow-bob 1.9s ease-in-out infinite; }
+
+.download-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: sheen 3.8s ease-in-out infinite;
+}
+
+/* ---- field focus: an accent line grows under the active input ---- */
+
+.field { position: relative; }
+
+.field::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: 50% 50%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s;
+}
+
+.field:focus-within::after { transform: scaleX(1); opacity: 1; }
+
+/* ---- compass rose on the ambient field ----
+   Placement is the whole problem here. The hero paints an opaque
+   gradient, so anything behind it is simply gone; the section cards
+   below are frosted and do let the field through. The rose therefore
+   sits low and hangs off the left edge — on a wide window it lands in
+   the gutter beside the cards, and on a narrow one it reads faintly
+   through them, the same way the orbs and tracks already do.
+   It turns slowly enough to read as an instrument settling rather
+   than a spinner. */
+
+@keyframes rose-turn { to { transform: rotate(360deg); } }
+
+.bg-decor .compass {
+  position: absolute;
+  left: -78px;
+  bottom: 7%;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  opacity: 0.45;
+  pointer-events: none;
+  background:
+    /* cardinal ticks */
+    conic-gradient(
+      from 0deg,
+      rgba(125, 211, 252, 0.55) 0 1.2deg, transparent 1.2deg 88.8deg,
+      rgba(125, 211, 252, 0.55) 88.8deg 91.2deg, transparent 91.2deg 178.8deg,
+      rgba(125, 211, 252, 0.55) 178.8deg 181.2deg, transparent 181.2deg 268.8deg,
+      rgba(125, 211, 252, 0.55) 268.8deg 271.2deg, transparent 271.2deg 360deg
+    ),
+    radial-gradient(closest-side, transparent 78%, rgba(148, 174, 214, 0.22) 79% 81%, transparent 82%);
+  animation: rose-turn 150s linear infinite;
+}
+
+/* the needle, held on its own layer so it turns against the rose */
+.bg-decor .compass::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  width: 2px;
+  height: 38%;
+  margin-left: -1px;
+  transform-origin: 50% 100%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.9), transparent);
+  animation: rose-turn 42s linear infinite reverse;
+}
+
+/* ---- responsive ----
+   The strip stays on a phone: it is feedback, not scenery. The
+   rose goes with the rest of the instruments. */
+@media (max-width: 860px) {
+  .bg-decor .compass { display: none; }
+}

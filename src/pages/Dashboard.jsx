@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Icons";
@@ -105,6 +105,57 @@ const FORMATS = [
 // label is what an operator reads.
 const formatLabel = (id) => FORMATS.find((f) => f.id === id)?.label || id;
 
+// What the backend is doing while the operator waits. These are the real
+// stages of /convert — parse, transform, render — so the strip advancing
+// is an honest account of the work, not a fake progress bar. It is time-
+// driven rather than event-driven because the request is a single POST
+// with no intermediate reporting; the last stage therefore holds until
+// the response lands rather than claiming completion.
+const STAGES = [
+  "Reading ForeFlight export",
+  "Parsing waypoints and winds",
+  "Computing fuel and times",
+  "Rendering the OPS PDF",
+];
+
+const STAGE_MS = 900;
+
+// Counts a hero figure up from zero on mount. Reduced-motion users get
+// the final number immediately — an animated count is exactly the kind
+// of movement that setting asks us to drop.
+function CountUp({ to, duration = 1050 }) {
+
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (still) {
+      setValue(to);
+      return;
+    }
+
+    let frame;
+    const started = performance.now();
+
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / duration);
+      // ease-out cubic: quick off the mark, settles onto the figure
+      setValue(Math.round(to * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+
+    frame = requestAnimationFrame(step);
+
+    return () => cancelAnimationFrame(frame);
+
+  }, [to, duration]);
+
+  return <>{value}</>;
+
+}
+
 function Dashboard() {
 
   const navigate = useNavigate();
@@ -151,6 +202,9 @@ function Dashboard() {
   });
 
   const [loading, setLoading] = useState(false);
+
+  // Which line of the flight strip is lit while a conversion runs.
+  const [stage, setStage] = useState(0);
 
   const [pdf, setPdf] = useState(null);
   const [pdfName, setPdfName] = useState("flight-plan.pdf");
@@ -206,9 +260,19 @@ function Dashboard() {
 
     setLoading(true);
 
+    setStage(0);
+
     setPdf(null);
 
     setJson(null);
+
+    // Walks the strip forward and stops on the last stage, which then
+    // holds until the response arrives — so the display never reads
+    // "finished" while the request is still open.
+    const ticker = setInterval(
+      () => setStage((current) => Math.min(current + 1, STAGES.length - 1)),
+      STAGE_MS
+    );
 
     try {
 
@@ -367,6 +431,8 @@ function Dashboard() {
 
     }
 
+    clearInterval(ticker);
+
     setLoading(false);
 
   }
@@ -429,6 +495,7 @@ function Dashboard() {
         <span className="orb o5" />
         <span className="tracks" />
         <span className="radar" />
+        <span className="compass" />
         <span className="navaid n1" />
         <span className="navaid n2" />
         <span className="navaid n3" />
@@ -452,7 +519,13 @@ function Dashboard() {
 
         <div className="header-right">
 
-          <div className="header-tag mono">{formatLabel(form.selectedFormat)}</div>
+          {/* keyed on the format so React remounts the span and the
+              departure-board flip replays on every change */}
+          <div className="header-tag mono">
+            <span className="flap" key={form.selectedFormat}>
+              {formatLabel(form.selectedFormat)}
+            </span>
+          </div>
 
           <div className="header-tag">
             <span className="dot" />
@@ -495,17 +568,17 @@ function Dashboard() {
           <div className="hero-stats">
 
             <div className="stat">
-              <b>{FORMATS.length}</b>
+              <b><CountUp to={FORMATS.length} /></b>
               <span>Fleet formats</span>
             </div>
 
             <div className="stat">
-              <b>3</b>
+              <b><CountUp to={3} /></b>
               <span>Routes per plan</span>
             </div>
 
             <div className="stat">
-              <b>4</b>
+              <b><CountUp to={4} /></b>
               <span>Pages output</span>
             </div>
 
@@ -812,29 +885,79 @@ function Dashboard() {
 
               <div className="panel-body">
 
-                <div className="checklist">
+                {
+                  loading
 
-                  <div className={`check-row ${files.mainFile ? "done" : ""}`}>
-                    <i>{files.mainFile ? "✓" : "1"}</i>
-                    Main route HTML
-                  </div>
+                    // While the conversion runs the checklist has nothing
+                    // left to say — swap it for the leg being flown.
+                    ? (
+                      <div className="flightstrip" aria-live="polite">
 
-                  <div className={`check-row ${crewDone ? "done" : ""}`}>
-                    <i>{crewDone ? "✓" : "2"}</i>
-                    Crew details
-                  </div>
+                        <div className="fs-route">
 
-                  <div className={`check-row ${fuelDone ? "done" : ""}`}>
-                    <i>{fuelDone ? "✓" : "3"}</i>
-                    Fuel figures
-                  </div>
+                          <span className="fs-node dep">
+                            {form.departure || "DEP"}
+                          </span>
 
-                  <div className={`check-row ${fplDone ? "done" : ""}`}>
-                    <i>{fplDone ? "✓" : "4"}</i>
-                    ATC flight plan
-                  </div>
+                          <span className="fs-line" aria-hidden="true">
+                            <i className="fs-plane" />
+                          </span>
 
-                </div>
+                          <span className="fs-node arr">
+                            {form.destination || "ARR"}
+                          </span>
+
+                        </div>
+
+                        <div className="fs-stages">
+                          {
+                            STAGES.map((label, index) => (
+
+                              <div
+                                key={label}
+                                className={
+                                  "fs-stage"
+                                  + (index < stage ? " done" : "")
+                                  + (index === stage ? " live" : "")
+                                }
+                              >
+                                <i />
+                                {label}
+                              </div>
+
+                            ))
+                          }
+                        </div>
+
+                      </div>
+                    )
+
+                    : (
+                      <div className="checklist">
+
+                        <div className={`check-row ${files.mainFile ? "done" : ""}`}>
+                          <i>{files.mainFile ? "✓" : "1"}</i>
+                          Main route HTML
+                        </div>
+
+                        <div className={`check-row ${crewDone ? "done" : ""}`}>
+                          <i>{crewDone ? "✓" : "2"}</i>
+                          Crew details
+                        </div>
+
+                        <div className={`check-row ${fuelDone ? "done" : ""}`}>
+                          <i>{fuelDone ? "✓" : "3"}</i>
+                          Fuel figures
+                        </div>
+
+                        <div className={`check-row ${fplDone ? "done" : ""}`}>
+                          <i>{fplDone ? "✓" : "4"}</i>
+                          ATC flight plan
+                        </div>
+
+                      </div>
+                    )
+                }
 
                 <div style={{ height: 16 }} />
 
