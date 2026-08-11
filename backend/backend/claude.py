@@ -20,13 +20,17 @@ AIRCRAFT_FUEL_LIMITS = {
     # derives it from REQUIRED fuel per flight.
     "VTCSP": {"maxTrip": "6175"},
     "VTBBN": {"maxTrip": "3235"},
+    "VTKCM": {"maxTrip": "3453"},
+    "VTKCM2": {"maxTrip": "3453"},
 }
 
 
 # VTCSP and INDO PACIFIC 1 are the same document family: the same page-1
 # "PLAN TIME & FUEL" layout, and the same derivation rules behind it (flat
 # taxi time, contingency, MIN TRIP FUEL, TRACK and TOP CLIMB TEMP).
-PLAN_TIME_TEMPLATES = ("VTCSP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2")
+PLAN_TIME_TEMPLATES = (
+    "VTCSP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2", "VTKCM",
+)
 
 # Contingency time on those templates is a tenth of trip time, but never
 # less than five minutes - see the contingency block below.
@@ -171,8 +175,10 @@ APPROACH_LANDING_FUEL = 220
 APPROACH_LANDING_MINUTES = 6
 
 # The TAXI row on these templates is a flat operator standard, not a
-# derived figure - both reference documents print 0:10.
+# derived figure - every one of their reference documents prints 0:10,
+# and their REQ / XTRA / T-O FUEL times only balance with it.
 FLAT_TAXI_MINUTES = 10
+FLAT_TAXI_TEMPLATES = PLAN_TIME_TEMPLATES + ("VTJOE",)
 
 
 def last_value(rows, key):
@@ -493,8 +499,16 @@ def convert_with_claude(master_json, template="MLOVE"):
     # reached across the main route's legs (climb/descent legs fly slower,
     # so the max is the cruise figure). Best-effort only.
     waypoints = array(main.get("waypoints"))
+
+    # VTJOE quotes the highest TAS anywhere in the plan, alternates
+    # included - its reference prints 501, which is reached on the
+    # diversion leg rather than on the main route.
+    tas_sources = list(waypoints)
+    if template == "VTJOE":
+        tas_sources += array(alt1.get("waypoints")) + array(alt2.get("waypoints"))
+
     max_tas = 0
-    for wpt in waypoints:
+    for wpt in tas_sources:
         try:
             tas_num = float(str(wpt.get("tas", "")).strip())
         except (TypeError, ValueError):
@@ -830,10 +844,17 @@ def convert_with_claude(master_json, template="MLOVE"):
     # allowances the footnote describes, which are already burnt before
     # the diversion starts. Falls back to the ALT1 row when the navlog
     # doesn't carry a usable time.
-    _min_divert_leg_minutes = hhmm_to_minutes(first(
-        last_value(alt1.get("waypoints"), "ete"),
-        page1["fuel"]["alternateTime"]
-    ))
+    # VTJOE's MDF row pairs its fuel with the ALT1 row's own time rather
+    # than the alternate navlog's last ETE: its reference prints 0:57
+    # against 2378 lbs, which is the 0:27 ALT1 time plus the 0:30 final
+    # reserve (the navlog's own last ETE on that flight is 0:28).
+    if template == "VTJOE":
+        _min_divert_leg_minutes = hhmm_to_minutes(page1["fuel"]["alternateTime"])
+    else:
+        _min_divert_leg_minutes = hhmm_to_minutes(first(
+            last_value(alt1.get("waypoints"), "ete"),
+            page1["fuel"]["alternateTime"]
+        ))
     _fres_minutes = hhmm_to_minutes(page1["fuel"]["finalReserveTime"])
     page1["fuel"]["minDivertEndurance"] = (
         minutes_to_hhmm(_min_divert_leg_minutes + _fres_minutes)
@@ -885,7 +906,7 @@ def convert_with_claude(master_json, template="MLOVE"):
     # and its ENDURANCE line only balances (TRIP + TAXI + CONTINGENCY +
     # FRES + XTRA + ALTN1 = the operator's total) when taxi is that flat
     # 10. The operator's "FUEL TIME" still tops it up below.
-    if template in PLAN_TIME_TEMPLATES:
+    if template in FLAT_TAXI_TEMPLATES:
         _taxi_time_minutes = FLAT_TAXI_MINUTES
 
     # Operator's "FUEL TIME" tops up the taxi time, which then flows into
@@ -1006,6 +1027,37 @@ def convert_with_claude(master_json, template="MLOVE"):
         _extra_time_minutes = _endurance_minutes - _req_time_minutes
 
     page1["fuel"]["extraEndurance"] = minutes_to_hhmm(_extra_time_minutes)
+
+    # ------------------------------------------------------
+    # ADDITIONAL / DISCRETIONARY (VTKCM)
+    # ------------------------------------------------------
+    # VTKCM's plan block carries an operator-entered ADDITIONAL row
+    # between FINAL RESERVE and ALTN1, and renames XTRA to DISCRETIONARY -
+    # which is the extra fuel less that additional figure. REQUIRED (and
+    # so MIN. TRIP FUEL) deliberately excludes ADDITIONAL, exactly as the
+    # reference's own 1492 lb figure does.
+    page1["fuel"]["additional"] = first(
+        user_input.get("additionalFuel"),
+        user_input.get("additional"),
+        ""
+    )
+    page1["fuel"]["additionalTime"] = first(
+        user_input.get("additionalTime"),
+        ""
+    )
+
+    page1["fuel"]["discretionary"] = first(
+        subtract_if_complete(page1["fuel"]["extra"], page1["fuel"]["additional"]),
+        page1["fuel"]["extra"]
+    )
+
+    _additional_minutes = hhmm_to_minutes(page1["fuel"]["additionalTime"])
+    if _extra_time_minutes is not None and _additional_minutes is not None:
+        page1["fuel"]["discretionaryTime"] = minutes_to_hhmm(
+            _extra_time_minutes - _additional_minutes
+        )
+    else:
+        page1["fuel"]["discretionaryTime"] = page1["fuel"]["extraEndurance"]
 
     page1["fuel"]["takeoff"] = subtract_if_complete(
         fw.get("blockFuel"),
@@ -1179,7 +1231,15 @@ def convert_with_claude(master_json, template="MLOVE"):
             # of page 1 uses ForeFlight's own "0h50m"-style duration,
             # uppercased ("0H50M"). Re-derive that format here rather than
             # reusing the colon-converted value.
-            "ete": minutes_to_hm_upper(hhmm_to_minutes(alt_summary.get("ete", ""))),
+            # VTJOE's ALT block quotes the diversion navlog's own last
+            # cumulative ETE (0H28M on its reference) rather than the
+            # summary figure the ALT1 fuel row uses (0:27) - the two can
+            # differ by a rounding minute, and this block sits above the
+            # very table the crew reads that figure off.
+            "ete": minutes_to_hm_upper(hhmm_to_minutes(first(
+                last_value(alt.get("waypoints"), "ete") if template == "VTJOE" else "",
+                alt_summary.get("ete", ""),
+            ))),
             "fuel": alt_fw_local.get("flightFuel", "")
         }
 
@@ -1296,6 +1356,25 @@ def convert_with_claude(master_json, template="MLOVE"):
 
         seen_airports.add(key)
         airport_rows.append(map_airport_row(row))
+
+    # VTKCM's AIRPORT INFO table also lists the alternates, each shown as
+    # its own leg's DESTINATION row relabelled ALTN1 / ALTN2.
+    if template == "VTKCM":
+        for index, alternate in enumerate((alt1, alt2), start=1):
+            destination = str(object_(alternate).get("destination") or "").strip()
+            if not destination:
+                continue
+
+            for row in array(object_(alternate).get("airportInfo")):
+                if str(row.get("airport", "")).strip() != destination:
+                    continue
+                if str(row.get("type", "")).upper() not in ("DEST", "ARR"):
+                    continue
+
+                mapped = map_airport_row(row)
+                mapped["type"] = f"ALTN{index}"
+                airport_rows.append(mapped)
+                break
 
     data["airportInformation"] = airport_rows
 
