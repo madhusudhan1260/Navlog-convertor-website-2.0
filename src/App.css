@@ -1670,6 +1670,7 @@
 .format-option:nth-child(7) { animation-delay: 0.28s; }
 .format-option:nth-child(8) { animation-delay: 0.32s; }
 .format-option:nth-child(9) { animation-delay: 0.36s; }
+.format-option:nth-child(10) { animation-delay: 0.40s; }
 
 .format-option:active { transform: translateX(3px) scale(0.985); }
 
@@ -1733,6 +1734,7 @@
 .hero-formats span:nth-child(7) { animation-delay: 0.60s; }
 .hero-formats span:nth-child(8) { animation-delay: 0.65s; }
 .hero-formats span:nth-child(9) { animation-delay: 0.70s; }
+.hero-formats span:nth-child(10) { animation-delay: 0.75s; }
 
 /* =========================================================
    12. AEROSPACE LAYER
@@ -1980,6 +1982,285 @@
    crowd the content and cost frames for nothing. */
 @media (max-width: 860px) {
   .flight, .bg-decor .radar, .navaid { display: none; }
+}
+
+/* =========================================================
+   14. FORMAT PICKER (step 1)
+   ---------------------------------------------------------
+   The format is now the first decision rather than a control
+   in the sidebar, so it gets the full width: one card per
+   fleet template, each carrying the notes that used to live
+   in the sidebar panel.
+   ========================================================= */
+
+.picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 18px;
+}
+
+.picker-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  text-align: left;
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--line-strong);
+  background: linear-gradient(168deg, rgba(19, 29, 51, 0.92), rgba(11, 18, 34, 0.94));
+  box-shadow: var(--sh-md), var(--edge);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  animation: rise 0.45s both;
+}
+
+.picker-card:hover {
+  transform: translateY(-4px);
+  border-color: #818cf8;
+  box-shadow: 0 26px 52px rgba(99, 102, 241, 0.38), var(--edge);
+}
+
+.picker-card:active { transform: translateY(-1px) scale(0.995); }
+
+/* The format carried over from the last run, so returning to this step
+   shows which sheet is currently loaded. Opaque padding-box layer so the
+   border gradient cannot bleed through. */
+.picker-card.is-current {
+  border-color: transparent;
+  background:
+    linear-gradient(168deg, #1a2547 0%, #221e4b 55%, #2a1f47 100%) padding-box,
+    linear-gradient(120deg, #38bdf8, #6366f1 50%, #c084fc) border-box;
+}
+
+.picker-top { display: flex; align-items: center; gap: 13px; }
+
+.picker-key {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 13px;
+  color: var(--ink-500);
+  background: var(--sunken);
+  transition: color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.picker-card:hover .picker-key,
+.picker-card.is-current .picker-key {
+  color: #fff;
+  background: linear-gradient(140deg, #38bdf8, #6366f1 55%, #c084fc);
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.picker-name strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-900);
+}
+
+.picker-name > span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.picker-tips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+  flex: 1;
+}
+
+.picker-tips li {
+  position: relative;
+  padding-left: 17px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.picker-tips li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.picker-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #a5b4fc;
+}
+
+.picker-go i {
+  font-style: normal;
+  transition: transform 0.2s;
+}
+
+.picker-card:hover .picker-go i { transform: translateX(4px); }
+
+.picker-card:nth-child(3n + 1) { --accent: #818cf8; }
+.picker-card:nth-child(3n + 2) { --accent: #22d3ee; }
+.picker-card:nth-child(3n + 3) { --accent: #c084fc; }
+
+/* ---- family cards ----
+   DEFAULT and INDO PACIFIC each file two sheets under one name, so their
+   card opens to reveal the variants instead of standing beside a near
+   twin. The head is the button; the card itself is a plain box, because a
+   button cannot legally contain the variant buttons. */
+
+.picker-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  padding: 0;
+  text-align: left;
+  background: none;
+  color: inherit;
+}
+
+.picker-card.is-open { border-color: #818cf8; }
+
+.picker-variants {
+  display: grid;
+  gap: 9px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  animation: slide-open 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slide-open {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.variant {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: var(--r);
+  border: 1.5px solid var(--line-strong);
+  background: rgba(10, 17, 33, 0.72);
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.variant:hover {
+  border-color: #818cf8;
+  background: rgba(30, 41, 74, 0.85);
+  transform: translateX(3px);
+}
+
+.variant.is-current { border-color: #818cf8; }
+
+.variant-key {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 10px;
+  color: var(--ink-500);
+  background: var(--sunken);
+  transition: color 0.2s, background 0.2s;
+}
+
+.variant:hover .variant-key,
+.variant.is-current .variant-key {
+  color: #fff;
+  background: linear-gradient(140deg, #38bdf8, #6366f1 55%, #c084fc);
+}
+
+.variant-text { flex: 1; }
+
+.variant-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.variant-text > span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-500);
+}
+
+.variant i {
+  font-style: normal;
+  color: #a5b4fc;
+  transition: transform 0.2s;
+}
+
+.variant:hover i { transform: translateX(3px); }
+
+/* ---- the chosen format, shown in step 2's sidebar ---- */
+
+.chosen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  border-radius: var(--r-md);
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(102deg, #1a2547 0%, #221e4b 55%, #2a1f47 100%) padding-box,
+    linear-gradient(120deg, #38bdf8, #6366f1 50%, #c084fc) border-box;
+  box-shadow: 0 16px 36px rgba(99, 102, 241, 0.3);
+}
+
+.chosen .format-key {
+  color: #fff;
+  background: linear-gradient(140deg, #38bdf8, #6366f1 55%, #c084fc);
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.change-format {
+  width: 100%;
+  margin-top: 11px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-800);
+  border-radius: var(--r);
+  border: 1.5px solid var(--line-strong);
+  background: rgba(10, 17, 33, 0.72);
+  transition: border-color 0.2s, background 0.2s, transform 0.16s, color 0.2s;
+}
+
+.change-format:hover {
+  border-color: #818cf8;
+  background: rgba(30, 41, 74, 0.8);
+  color: var(--ink-900);
+  transform: translateY(-1px);
+}
+
+.change-format:active { transform: translateY(0) scale(0.99); }
+
+@media (max-width: 860px) {
+  .picker { grid-template-columns: 1fr; }
 }
 
 /* =========================================================

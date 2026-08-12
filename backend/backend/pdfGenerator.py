@@ -604,9 +604,14 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
     """
     prefix = str(file_prefix).upper()
 
-    if prefix == "DEFAULT":
-        from default import generate_default_pdf
-        return generate_default_pdf(navlog)
+    # DEFAULT and DEFAULT 1 print the same sheet. That was established by
+    # measuring the operator's reference for each against the other: every
+    # page-1 anchor matches to 0.00pt, and the only difference is the ALTN2
+    # row a second alternate adds. default.py - which printed a hard-coded
+    # fuel block regardless of the navlog - is no longer used for it.
+    if prefix in ("DEFAULT", "DEFAULT1"):
+        from default1 import generate_default1_pdf
+        return generate_default1_pdf(navlog, file_prefix=prefix)
 
     if prefix == "VTBBD":
         from vtbbd import generate_vtbbd_pdf

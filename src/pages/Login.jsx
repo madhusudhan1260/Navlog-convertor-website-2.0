@@ -98,7 +98,7 @@ function Login() {
 
           <div className="hero-point">
             <i><DocIcon /></i>
-            Print-ready OPS flight plans in nine fleet formats
+            Print-ready OPS flight plans in ten fleet formats
           </div>
 
           <div className="hero-point">
@@ -116,6 +116,7 @@ function Login() {
         <div className="hero-formats">
           <span>MLOVE</span>
           <span>DEFAULT</span>
+          <span>DEFAULT 1</span>
           <span>VTBBD</span>
           <span>VTVIK</span>
           <span>VTCSP</span>

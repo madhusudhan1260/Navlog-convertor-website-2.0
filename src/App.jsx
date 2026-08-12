@@ -22,6 +22,20 @@ function RequireAuth({ children }) {
 }
 
 
+// The sign-in screen is not somewhere a signed-in operator ever wants to
+// land. Without this, pressing Back off the dashboard - or reopening the
+// bare URL - showed a login form to someone who was already through it.
+function RedirectIfSignedIn({ children }) {
+
+  if (isSignedIn()) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+
+}
+
+
 function App() {
 
 
@@ -35,12 +49,29 @@ return (
 
 <Route
 path="/"
-element={<Login />}
+element={
+  <RedirectIfSignedIn>
+    <Login />
+  </RedirectIfSignedIn>
+}
+/>
+
+
+{/* The chosen format lives in the URL rather than in component state,
+    so the browser's Back button steps from the details form back to the
+    format picker instead of leaving the dashboard altogether. */}
+<Route
+path="/dashboard"
+element={
+  <RequireAuth>
+    <Dashboard />
+  </RequireAuth>
+}
 />
 
 
 <Route
-path="/dashboard"
+path="/dashboard/:formatId"
 element={
   <RequireAuth>
     <Dashboard />
