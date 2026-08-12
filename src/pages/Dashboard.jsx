@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Icons";
 import { API_URL } from "../api";
@@ -20,8 +20,21 @@ const FORMATS = [
     key: "DF",
     note: "A4 · standard nav log",
     tips: [
-      "Contingency = higher of 5% trip fuel or 30 min hold",
-      "Max Trip Fuel is operator-supplied",
+      "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+      "Taxi prints a flat 0:10; Min Trip Fuel = REQUIRED fuel",
+      "A second alternate adds an ALTN2 row and moves the block below it down",
+    ],
+  },
+  {
+    id: "DEFAULT1",
+    label: "DEFAULT 1",
+    key: "D1",
+    note: "A4 · flat navlog, 3 pages",
+    tips: [
+      "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+      "Taxi prints a flat 0:10; Min Trip Fuel = REQUIRED fuel",
+      "Waypoints with a navaid print the ident and city together, frequency beneath",
+      "TRACK prints the average wind's direction, as the operator's sheet does",
     ],
   },
   {
@@ -105,6 +118,193 @@ const FORMATS = [
 // label is what an operator reads.
 const formatLabel = (id) => FORMATS.find((f) => f.id === id)?.label || id;
 
+// Some fleets file more than one sheet under the same name, so the picker
+// shows one card per family and opens it to reveal the variants rather than
+// putting near-identical cards side by side.
+const FAMILY_META = {
+  DEFAULT: {
+    key: "DF",
+    note: "A4 · 2 sheets",
+    members: ["DEFAULT", "DEFAULT1"],
+    tips: [
+      "Both print the same operator sheet",
+      "Flat navlog, sized to its own contents",
+      "A second alternate adds the ALTN2 row",
+    ],
+  },
+  "INDO PACIFIC": {
+    key: "IP",
+    note: "A4 · 2 sheets",
+    members: ["INDOPACIFIC1", "INDOPACIFIC2"],
+    tips: [
+      "INDO PACIFIC 1 — single alternate, no ALTN2 row",
+      "INDO PACIFIC 2 — reserves the ALTN2 row",
+      "Same page-1 layout; the 2 ALT sheet sits one row lower",
+    ],
+  },
+};
+
+// One entry per card on the picker, in the order the formats are declared.
+// A family takes the position of its first member.
+const FAMILIES = (() => {
+  const belongsTo = {};
+  for (const [name, meta] of Object.entries(FAMILY_META)) {
+    for (const id of meta.members) belongsTo[id] = name;
+  }
+
+  const cards = [];
+  const seen = new Set();
+
+  for (const format of FORMATS) {
+    const family = belongsTo[format.id];
+
+    if (!family) {
+      cards.push({
+        name: format.label || format.id,
+        key: format.key,
+        note: format.note,
+        tips: format.tips || [],
+        members: [format],
+      });
+      continue;
+    }
+
+    if (seen.has(family)) continue;
+    seen.add(family);
+
+    const meta = FAMILY_META[family];
+    cards.push({
+      name: family,
+      key: meta.key,
+      note: meta.note,
+      tips: meta.tips,
+      members: meta.members.map((id) => FORMATS.find((f) => f.id === id)),
+    });
+  }
+
+  return cards;
+})();
+
+const ALL_FORMATS = FORMATS.map((f) => f.id);
+
+const except = (...ids) => ALL_FORMATS.filter((id) => !ids.includes(id));
+
+// Which formats each operator-entered field actually changes.
+//
+// Measured, not assumed: every format was rendered twice - once with the
+// field blank and once with it set - and the two PDFs compared. A format is
+// listed here only where the field demonstrably changes its sheet, so the
+// form for a given format never shows a box that would do nothing.
+//
+const FIELD_USAGE = {
+  callSign: ["MLOVE", "VTBBD", "VTJOE"],
+  pilotName: ALL_FORMATS,
+  coPilotName: ALL_FORMATS,
+  cabinCrewName: ["VTBBD"],
+  ccWeight: ["VTBBD"],
+
+  departure: ALL_FORMATS,
+  destination: ALL_FORMATS,
+  flightLevel: ALL_FORMATS,
+
+  paxWeight: ALL_FORMATS,
+  maxTripFuel: ["DEFAULT", "DEFAULT1", "VTVIK", "VTCSP", "INDOPACIFIC1",
+                "INDOPACIFIC2", "VTKCM"],
+  endurance: ALL_FORMATS,
+  contingencyFuel: ALL_FORMATS,
+  contingencyTime: ALL_FORMATS,
+  additionalFuel: ["VTKCM"],
+  additionalTime: ["VTKCM"],
+  fuel: ALL_FORMATS,
+  fuel1: ALL_FORMATS,
+  fuelTime: except("VTVIK"),
+  fuel1Time: ALL_FORMATS,
+
+  icaoFlightPlan: ALL_FORMATS,
+};
+
+// The detail form as data, so a format's sheet can be assembled by filtering
+// rather than by threading a condition through every input.
+const FORM_SECTIONS = [
+  {
+    num: "01",
+    title: "Crew & Aircraft",
+    accent: "c-indigo",
+    rows: [
+      {
+        cols: 3,
+        fields: [
+          { name: "callSign", label: "Call Sign", placeholder: "VTECG" },
+          { name: "pilotName", label: "Pilot in Command", placeholder: "CAPT SHREYAS VYAS" },
+          { name: "coPilotName", label: "First Officer", placeholder: "CAPT SANSKAR MISHRA" },
+        ],
+      },
+      {
+        cols: 2,
+        fields: [
+          { name: "cabinCrewName", label: "Cabin Crew Name", placeholder: "MS SHWETA DIWAN" },
+          { name: "ccWeight", label: "Cabin Crew Count", placeholder: "1  →  prints 1 - 187" },
+        ],
+      },
+    ],
+  },
+  {
+    num: "02",
+    title: "Route",
+    accent: "c-cyan",
+    hint: "Blank = use values parsed from the HTML",
+    rows: [
+      {
+        cols: 3,
+        fields: [
+          { name: "departure", label: "Departure ICAO", placeholder: "VIDP" },
+          { name: "destination", label: "Destination ICAO", placeholder: "VECC" },
+          { name: "flightLevel", label: "Flight Level", placeholder: "FL450" },
+        ],
+      },
+    ],
+  },
+  {
+    num: "03",
+    title: "Fuel & Weights",
+    accent: "c-amber",
+    hint: "Not carried by ForeFlight — enter per flight",
+    rows: [
+      {
+        cols: 3,
+        fields: [
+          { name: "paxWeight", label: "PAX", placeholder: "1  →  prints 1 - 165 on VTBBD" },
+          { name: "maxTripFuel", label: "Max Trip Fuel", placeholder: "3329" },
+          { name: "endurance", label: "Endurance", placeholder: "4:15" },
+        ],
+      },
+      {
+        cols: 2,
+        fields: [
+          { name: "contingencyFuel", label: "Contingency Fuel (lbs)", placeholder: "250" },
+          { name: "contingencyTime", label: "Contingency Time", placeholder: "0:13" },
+        ],
+      },
+      {
+        cols: 2,
+        fields: [
+          { name: "additionalFuel", label: "Additional Fuel (lbs)", placeholder: "100" },
+          { name: "additionalTime", label: "Additional Time", placeholder: "0:10" },
+        ],
+      },
+      {
+        cols: 2,
+        fields: [
+          { name: "fuel", label: "Fuel", badge: "+ TRIP", placeholder: "lbs added to TRIP" },
+          { name: "fuel1", label: "Fuel 1", badge: "+ ALT1", placeholder: "lbs added to ALT1" },
+          { name: "fuelTime", label: "Fuel Time", badge: "+ TAXI", placeholder: "0:10" },
+          { name: "fuel1Time", label: "Fuel 1 Time", badge: "+ ALT1", placeholder: "0:05" },
+        ],
+      },
+    ],
+  },
+];
+
 // What the backend is doing while the operator waits. These are the real
 // stages of /convert — parse, transform, render — so the strip advancing
 // is an honest account of the work, not a fake progress bar. It is time-
@@ -131,7 +331,11 @@ function CountUp({ to, duration = 1050 }) {
 
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    if (still) {
+    // requestAnimationFrame does not fire in a hidden tab, so a page loaded
+    // in the background would sit on 0 — a wrong figure on screen — until
+    // it was looked at. Nobody is watching an animation they cannot see, so
+    // a hidden tab gets the real number straight away.
+    if (still || document.hidden) {
       setValue(to);
       return;
     }
@@ -202,6 +406,31 @@ function Dashboard() {
   });
 
   const [loading, setLoading] = useState(false);
+
+  // The dashboard is a two-step flow: pick the output format, then fill in
+  // the details that format actually prints. Which step you are on is the
+  // URL, not component state - /dashboard is the picker and
+  // /dashboard/<FORMAT> is the form - so the browser's Back button steps
+  // back to the picker rather than off the dashboard entirely.
+  const { formatId } = useParams();
+
+  const knownFormat = FORMATS.some((f) => f.id === formatId);
+  const step = formatId && knownFormat ? "details" : "format";
+
+  // Which family card is expanded on the picker (the ones with variants).
+  const [openFamily, setOpenFamily] = useState(null);
+
+  // The URL is the source of truth for the format; mirror it into the form
+  // so the value posted to /convert always matches the page you are on.
+  useEffect(() => {
+    if (formatId && FORMATS.some((f) => f.id === formatId)) {
+      setForm((previous) =>
+        previous.selectedFormat === formatId
+          ? previous
+          : { ...previous, selectedFormat: formatId }
+      );
+    }
+  }, [formatId]);
 
   // Which line of the flight strip is lit while a conversion runs.
   const [stage, setStage] = useState(0);
@@ -480,6 +709,63 @@ function Dashboard() {
   const fuelDone = form.endurance !== "" || form.contingencyFuel !== "";
   const fplDone = form.icaoFlightPlan !== "";
 
+  // ================= FORMAT-AWARE FORM =================
+
+  const uses = (name) =>
+    (FIELD_USAGE[name] || ALL_FORMATS).includes(form.selectedFormat);
+
+  // Keep only the fields this format prints, drop rows that empty out, then
+  // drop sections that have no rows left.
+  const visibleSections = FORM_SECTIONS.map((section) => ({
+    ...section,
+    rows: section.rows
+      .map((row) => ({ ...row, fields: row.fields.filter((f) => uses(f.name)) }))
+      .filter((row) => row.fields.length > 0),
+  })).filter((section) => section.rows.length > 0);
+
+  const hiddenCount =
+    FORM_SECTIONS.reduce(
+      (total, s) => total + s.rows.reduce((n, r) => n + r.fields.length, 0), 0
+    ) -
+    visibleSections.reduce(
+      (total, s) => total + s.rows.reduce((n, r) => n + r.fields.length, 0), 0
+    );
+
+  const chosen = FORMATS.find((f) => f.id === form.selectedFormat);
+
+  function pickFormat(id) {
+    navigate(`/dashboard/${id}`);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function backToPicker() {
+    navigate("/dashboard");
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function renderField(field) {
+    return (
+      <div className="field" key={field.name}>
+        <label>
+          {field.label}
+          {field.badge ? <span className="opt">{field.badge}</span> : null}
+        </label>
+        <input
+          name={field.name}
+          placeholder={field.placeholder}
+          value={form[field.name]}
+          onChange={update}
+        />
+      </div>
+    );
+  }
+
+  // A typed or stale /dashboard/<id> that names no known format falls back
+  // to the picker instead of rendering a form for nothing.
+  if (formatId && !knownFormat) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
 
     <div>
@@ -555,14 +841,25 @@ function Dashboard() {
           <span className="flight f4" aria-hidden="true"><i /></span>
           <span className="runway" aria-hidden="true" />
 
-          <div className="eyebrow">Flight Planning</div>
+          <div className="eyebrow">
+            {step === "format" ? "Step 1 of 2" : "Step 2 of 2"}
+          </div>
 
-          <h1>Generate an <em>OPS flight plan</em></h1>
+          {
+            step === "format"
+              ? <h1>Choose an <em>output format</em></h1>
+              : <h1>Fill in the <em>{formatLabel(form.selectedFormat)}</em> details</h1>
+          }
 
           <p>
-            Upload your ForeFlight navlog exports, add the crew and fuel figures
-            that ForeFlight doesn't carry, then choose an output format to
-            produce a print-ready operational flight plan.
+            {
+              step === "format"
+                ? "Every fleet prints its operational flight plan to its own template. "
+                  + "Pick one and the next step asks only for the figures that template "
+                  + "actually prints."
+                : "Upload your ForeFlight navlog exports and add the figures ForeFlight "
+                  + "doesn't carry. Anything left blank prints as a hand-fill line."
+            }
           </p>
 
           <div className="hero-stats">
@@ -591,181 +888,154 @@ function Dashboard() {
 
         </div>
 
+        {/* ================= STEP 1: FORMAT PICKER ================= */}
+
+        {
+          step === "format" && (
+
+            <div className="picker">
+
+              {
+                FAMILIES.map((card, index) => {
+
+                  const single = card.members.length === 1;
+                  const isOpen = openFamily === card.name;
+                  const holdsCurrent = card.members
+                    .some(m => m.id === form.selectedFormat);
+
+                  return (
+
+                    <div
+                      key={card.name}
+                      className={
+                        "picker-card"
+                        + (holdsCurrent ? " is-current" : "")
+                        + (isOpen ? " is-open" : "")
+                      }
+                      style={{ animationDelay: `${0.04 * index}s` }}
+                    >
+
+                      <button
+                        type="button"
+                        className="picker-head"
+                        onClick={() =>
+                          single
+                            ? pickFormat(card.members[0].id)
+                            : setOpenFamily(isOpen ? null : card.name)
+                        }
+                        aria-expanded={single ? undefined : isOpen}
+                      >
+
+                        <div className="picker-top">
+                          <span className="picker-key">{card.key}</span>
+                          <span className="picker-name">
+                            <strong>{card.name}</strong>
+                            <span>{card.note}</span>
+                          </span>
+                        </div>
+
+                        <ul className="picker-tips">
+                          {card.tips.slice(0, 3).map(tip => (
+                            <li key={tip}>{tip}</li>
+                          ))}
+                        </ul>
+
+                        <span className="picker-go">
+                          {single
+                            ? "Fill in details"
+                            : isOpen
+                              ? "Hide sheets"
+                              : `Choose one of ${card.members.length} sheets`}
+                          <i aria-hidden="true">{single ? "\u2192" : "\u25be"}</i>
+                        </span>
+
+                      </button>
+
+                      {
+                        !single && isOpen && (
+
+                          <div className="picker-variants">
+                            {
+                              card.members.map(member => (
+
+                                <button
+                                  type="button"
+                                  key={member.id}
+                                  className={
+                                    "variant"
+                                    + (form.selectedFormat === member.id ? " is-current" : "")
+                                  }
+                                  onClick={() => pickFormat(member.id)}
+                                >
+                                  <span className="variant-key">{member.key}</span>
+                                  <span className="variant-text">
+                                    <strong>{member.label || member.id}</strong>
+                                    <span>{member.note}</span>
+                                  </span>
+                                  <i aria-hidden="true">&rarr;</i>
+                                </button>
+
+                              ))
+                            }
+                          </div>
+
+                        )
+                      }
+
+                    </div>
+
+                  );
+
+                })
+              }
+
+            </div>
+
+          )
+        }
+
+        {/* ================= STEP 2: DETAILS ================= */}
+
+        {
+          step === "details" && (
+
         <div className="layout">
 
           {/* ================= MAIN COLUMN ================= */}
 
           <main>
 
-            {/* ---- 1. CREW ---- */}
+            {/* ---- FORMAT-SPECIFIC FIELDS ---- */}
 
-            <section className="section c-indigo">
+            {
+              visibleSections.map(section => (
 
-              <div className="section-head">
-                <div className="section-num">01</div>
-                <h2>Crew &amp; Aircraft</h2>
-              </div>
+                <section className={`section ${section.accent}`} key={section.num}>
 
-              <div className="section-body">
-
-                <div className="grid3">
-
-                  <div className="field">
-                    <label>Call Sign</label>
-                    <input name="callSign" placeholder="VTECG" value={form.callSign} onChange={update} />
+                  <div className="section-head">
+                    <div className="section-num">{section.num}</div>
+                    <h2>{section.title}</h2>
+                    {section.hint ? <span className="hint">{section.hint}</span> : null}
                   </div>
 
-                  <div className="field">
-                    <label>Pilot in Command</label>
-                    <input name="pilotName" placeholder="CAPT SHREYAS VYAS" value={form.pilotName} onChange={update} />
+                  <div className="section-body">
+                    {
+                      section.rows.map((row, index) => (
+                        <div
+                          className={`grid${Math.min(row.cols, row.fields.length)}`}
+                          key={index}
+                        >
+                          {row.fields.map(renderField)}
+                        </div>
+                      ))
+                    }
                   </div>
 
-                  <div className="field">
-                    <label>First Officer</label>
-                    <input name="coPilotName" placeholder="CAPT SANSKAR MISHRA" value={form.coPilotName} onChange={update} />
-                  </div>
+                </section>
 
-                </div>
+              ))
+            }
 
-                <div className="grid2">
-
-                  <div className="field">
-                    <label>Cabin Crew Name <span className="opt">VTBBD</span></label>
-                    <input name="cabinCrewName" placeholder="MS SHWETA DIWAN" value={form.cabinCrewName} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Cabin Crew Count <span className="opt">VTBBD</span></label>
-                    <input name="ccWeight" placeholder="1  →  prints 1 - 187" value={form.ccWeight} onChange={update} />
-                  </div>
-
-                </div>
-
-              </div>
-
-            </section>
-
-            {/* ---- 2. ROUTE ---- */}
-
-            <section className="section c-cyan">
-
-              <div className="section-head">
-                <div className="section-num">02</div>
-                <h2>Route</h2>
-                <span className="hint">Blank = use values parsed from the HTML</span>
-              </div>
-
-              <div className="section-body">
-
-                <div className="grid3">
-
-                  <div className="field">
-                    <label>Departure ICAO</label>
-                    <input name="departure" placeholder="VIDP" value={form.departure} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Destination ICAO</label>
-                    <input name="destination" placeholder="VECC" value={form.destination} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Flight Level</label>
-                    <input name="flightLevel" placeholder="FL450" value={form.flightLevel} onChange={update} />
-                  </div>
-
-                </div>
-
-              </div>
-
-            </section>
-
-            {/* ---- 3. FUEL & WEIGHTS ---- */}
-
-            <section className="section c-amber">
-
-              <div className="section-head">
-                <div className="section-num">03</div>
-                <h2>Fuel &amp; Weights</h2>
-                <span className="hint">Not carried by ForeFlight — enter per flight</span>
-              </div>
-
-              <div className="section-body">
-
-                <div className="grid3">
-
-                  <div className="field">
-                    <label>PAX</label>
-                    <input name="paxWeight" placeholder="1  →  prints 1 - 165 on VTBBD" value={form.paxWeight} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Max Trip Fuel</label>
-                    <input name="maxTripFuel" placeholder="3329" value={form.maxTripFuel} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Endurance</label>
-                    <input name="endurance" placeholder="4:15" value={form.endurance} onChange={update} />
-                  </div>
-
-                </div>
-
-                <div className="grid2">
-
-                  <div className="field">
-                    <label>Contingency Fuel (lbs)</label>
-                    <input name="contingencyFuel" placeholder="250" value={form.contingencyFuel} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Contingency Time</label>
-                    <input name="contingencyTime" placeholder="0:13" value={form.contingencyTime} onChange={update} />
-                  </div>
-
-                </div>
-
-                <div className="grid2">
-
-                  <div className="field">
-                    <label>Additional Fuel (lbs) <span className="opt">VTKCM</span></label>
-                    <input name="additionalFuel" placeholder="100" value={form.additionalFuel} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Additional Time <span className="opt">VTKCM</span></label>
-                    <input name="additionalTime" placeholder="0:10" value={form.additionalTime} onChange={update} />
-                  </div>
-
-                </div>
-
-                <div className="grid2">
-
-                  <div className="field">
-                    <label>Fuel <span className="opt">+ TRIP</span></label>
-                    <input name="fuel" placeholder="lbs added to TRIP" value={form.fuel} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Fuel 1 <span className="opt">+ ALT1</span></label>
-                    <input name="fuel1" placeholder="lbs added to ALT1" value={form.fuel1} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Fuel Time <span className="opt">+ TAXI</span></label>
-                    <input name="fuelTime" placeholder="0:10" value={form.fuelTime} onChange={update} />
-                  </div>
-
-                  <div className="field">
-                    <label>Fuel 1 Time <span className="opt">+ ALT1</span></label>
-                    <input name="fuel1Time" placeholder="0:05" value={form.fuel1Time} onChange={update} />
-                  </div>
-
-                </div>
-
-              </div>
-
-            </section>
 
             {/* ---- 4. FILES ---- */}
 
@@ -841,7 +1111,7 @@ function Dashboard() {
 
           <aside className="aside">
 
-            {/* format */}
+            {/* the format chosen in step 1 */}
 
             <div className="panel">
 
@@ -849,29 +1119,34 @@ function Dashboard() {
 
               <div className="panel-body">
 
-                <div className="format-list">
+                <div className="chosen">
 
-                  {
-                    FORMATS.map(item => (
+                  <span className="format-key">{chosen?.key}</span>
 
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`format-option ${form.selectedFormat === item.id ? "active" : ""}`}
-                        onClick={() => setForm(prev => ({ ...prev, selectedFormat: item.id }))}
-                      >
-                        <span className="format-key">{item.key}</span>
-
-                        <span className="format-text">
-                          <strong>{item.label || item.id}</strong>
-                          <span>{item.note}</span>
-                        </span>
-                      </button>
-
-                    ))
-                  }
+                  <span className="format-text">
+                    <strong>{formatLabel(form.selectedFormat)}</strong>
+                    <span>{chosen?.note}</span>
+                  </span>
 
                 </div>
+
+                <button
+                  type="button"
+                  className="change-format"
+                  onClick={backToPicker}
+                >
+                  Change format
+                </button>
+
+                {
+                  hiddenCount > 0 && (
+                    <div className="action-note">
+                      {hiddenCount} field{hiddenCount === 1 ? "" : "s"} hidden —
+                      {" "}{formatLabel(form.selectedFormat)} doesn't print
+                      {hiddenCount === 1 ? " it" : " them"}
+                    </div>
+                  )
+                }
 
               </div>
 
@@ -1047,6 +1322,9 @@ function Dashboard() {
           </aside>
 
         </div>
+
+          )
+        }
 
       </div>
 

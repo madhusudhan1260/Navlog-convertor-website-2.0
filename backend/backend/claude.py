@@ -30,6 +30,7 @@ AIRCRAFT_FUEL_LIMITS = {
 # taxi time, contingency, MIN TRIP FUEL, TRACK and TOP CLIMB TEMP).
 PLAN_TIME_TEMPLATES = (
     "VTCSP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2", "VTKCM",
+    "DEFAULT", "DEFAULT1",
 )
 
 # Contingency time on those templates is a tenth of trip time, but never
@@ -690,11 +691,12 @@ def convert_with_claude(master_json, template="MLOVE"):
     if _trip_time_minutes_for_contingency is not None:
         _five_pct_time = _trip_time_minutes_for_contingency * 0.05
 
-    if template == "DEFAULT":
-        # (b) needs a holding-altitude fuel flow rate, which ForeFlight
-        # also never states directly - the closest available figure is
-        # the flight's own published enroute "Fuel Flow" (e.g. "372
-        # lbs/hr (Per Engine)"), used here as a best-effort stand-in.
+    if template == "__DEFAULT_LEGACY__":
+        # Kept for reference only. DEFAULT used to take this "higher of 5%
+        # or a 30-minute hold" path, which printed 0:30 / 379 lbs where the
+        # operator's own sheet prints 0:05 / 26 lbs. It now derives its
+        # contingency the same way the rest of that document family does,
+        # so this branch is no longer reachable.
         _holding_rate = parse_fuel_flow_per_hour(summary.get("fuelFlow"))
         _holding_fuel = _holding_rate * 0.5 if _holding_rate else None  # 30 min
         _holding_time = 30 if _holding_rate else None
@@ -793,10 +795,38 @@ def convert_with_claude(master_json, template="MLOVE"):
     # nothing to find no matter what key names it tried. This mirrors the
     # exact same ALT1 calculation, using alt2's own fuel/taxi figures, and
     # stores it under "alternate2Fuel" - a key default.py already checks.
+    # The taxi allowance is subtracted once, and it is the departure's:
+    # ForeFlight gives each alternate plan its own taxi figure (88 lbs on
+    # the VTYAN sheet's second alternate against the flight's 90), and
+    # using the alternate's own puts ALTN2 2 lbs above what the operator
+    # prints. Falling back to the alternate's figure when the flight's is
+    # missing or larger than the whole diversion keeps a mismatched pair of
+    # uploads from producing a negative.
+    # The base is the alternate navlog's own last USED figure rather than
+    # ForeFlight's summary "Flight Fuel", which can sit a pound or two
+    # above it once the legs are rounded (781 against 779 on the VTYAN
+    # sheet). The operator's ALTN2 row reconciles with the navlog.
+    _alt2_burn = last_numeric(alt2.get("waypoints"), "fuelUsed")
+
     _alt2_fuel_fixed = subtract_if_complete(
-        alt2_fw.get("flightFuel"),
-        alt2_fw.get("taxiFuel")
+        str(round(_alt2_burn)) if _alt2_burn is not None else alt2_fw.get("flightFuel"),
+        fw.get("taxiFuel")
     )
+
+    # A mismatched pair of uploads - an alternate belonging to a different
+    # flight - can leave the departure's taxi larger than the whole
+    # diversion; fall back rather than print a negative fuel figure.
+    try:
+        if float(_alt2_fuel_fixed) < 0:
+            _alt2_fuel_fixed = ""
+    except (TypeError, ValueError):
+        pass
+
+    if not _alt2_fuel_fixed:
+        _alt2_fuel_fixed = subtract_if_complete(
+            alt2_fw.get("flightFuel"),
+            alt2_fw.get("taxiFuel")
+        )
 
     page1["fuel"]["alternate2Fuel"] = first(
         _alt2_fuel_fixed,
