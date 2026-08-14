@@ -817,6 +817,17 @@ def _draw_row(pdf, row, y, COLUMN_X):
     return y + height
 
 
+def _drop_origin_row(rows):
+    """An alternate plan starts where the main route ended, so ForeFlight
+    repeats that airport as the block's own origin row - no heading, no
+    course, just the taxi fuel. The operator's sheet leaves it out: its
+    alternate blocks open on the first navaid (JJBJABALPUR, not VAJB),
+    while the main block does keep its origin row. Matched here."""
+    if rows and not value(rows[0].get("heading")).strip(" -"):
+        return rows[1:]
+    return rows
+
+
 def _draw_banner(pdf, left_text, right_text, y, COLUMN_X):
     bottom = y + BANNER_HEIGHT
     _hline(pdf, COLUMN_X[0], COLUMN_X[-1], bottom)
@@ -870,7 +881,7 @@ def draw_navlog_pages(pdf, data):
         route_text = value(routes.get(route_key)).replace("Route", "").strip()
         banner_right = f"Route {route_text}" if route_text else ""
 
-        blocks.append((banner_left, banner_right, rows))
+        blocks.append((banner_left, banner_right, _drop_origin_row(rows)))
 
     for banner_left, banner_right, rows in blocks:
         if banner_left is not None:
