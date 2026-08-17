@@ -28,9 +28,17 @@ AIRCRAFT_FUEL_LIMITS = {
 # VTCSP and INDO PACIFIC 1 are the same document family: the same page-1
 # "PLAN TIME & FUEL" layout, and the same derivation rules behind it (flat
 # taxi time, contingency, MIN TRIP FUEL, TRACK and TOP CLIMB TEMP).
+#
+# VTVIK joined this set once its own reference (VTBBN) turned out to be the
+# same base template as DEFAULT/DEFAULT 1 rather than the boxed dual-ATIS
+# form vtvik.py used to draw - confirmed by the same figures the reference
+# prints: CONTINGENCY 5% at 0:05 on a 0:13 trip (10% of trip time, floored
+# at 5 minutes), TAXI a flat 0:10, MIN. TRIP FUEL populated (falls back to
+# REQUIRED fuel), and TRACK printing the wind's own bearing (274 DEG,
+# matching WIND : 19KT HEAD (274°/021)) rather than the computed track.
 PLAN_TIME_TEMPLATES = (
     "VTCSP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2", "VTKCM",
-    "DEFAULT", "DEFAULT1",
+    "DEFAULT", "DEFAULT1", "VTVIK",
 )
 
 # Contingency time on those templates is a tenth of trip time, but never
@@ -734,22 +742,23 @@ def convert_with_claude(master_json, template="MLOVE"):
             _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
         elif _five_min_fuel is not None:
             _computed_contingency_fuel, _computed_contingency_time = _five_min_fuel, 5
-    elif template in ("VTVIK",) + PLAN_TIME_TEMPLATES:
+    elif template in PLAN_TIME_TEMPLATES:
         # VTVIK's and VTCSP's own references both label this row
-        # "CONTINGENCY 5%" and print exactly 5% of trip fuel (VTVIK: 108
-        # lbs on a 2160 lb trip; VTCSP: 117 lbs on a 2341 lb trip) - no
+        # "CONTINGENCY 5%" and print exactly 5% of trip fuel (VTVIK: 18
+        # lbs on a 367 lb trip; VTCSP: 117 lbs on a 2341 lb trip) - no
         # "whichever is higher" comparison, unlike DEFAULT/VTBBD.
         if _five_pct_fuel is not None:
             _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
 
         # On these templates the contingency TIME does not track the 5%
         # fuel figure - it is 10% of trip time, floored at five minutes.
-        # All three of the operator's reference documents agree:
+        # The operator's reference documents agree:
         #   VTCSP        117 lbs / 0:09 on a 1:32 trip  -> a tenth of 92
         #   VIDP-VECC     81 lbs / 0:13 on a 2:10 trip  -> a tenth of 130
         #   INDO PACIFIC  24 lbs / 0:05 on a 0:18 trip  -> the 5 min floor
+        #   VTBBN/VTVIK   18 lbs / 0:05 on a 0:13 trip  -> the 5 min floor
         # The XTRA and ENDURANCE rows on each document only add up with it.
-        if template in PLAN_TIME_TEMPLATES and _trip_time_minutes_for_contingency is not None:
+        if _trip_time_minutes_for_contingency is not None:
             _computed_contingency_time = max(
                 _trip_time_minutes_for_contingency * 0.10,
                 CONTINGENCY_MINIMUM_MINUTES,
