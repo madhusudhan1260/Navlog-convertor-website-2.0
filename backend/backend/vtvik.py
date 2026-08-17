@@ -3,9 +3,11 @@ import re
 from datetime import datetime
 
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from common import (
+    FONT_NAME,
     OUTPUT_DIRECTORY,
     NAV_COLUMNS,
     _cell_line_count,
@@ -13,7 +15,6 @@ from common import (
     combined_row_value,
     field,
     find_value,
-    labelled_value,
     line,
     route_header,
     set_page_height,
@@ -32,17 +33,108 @@ from common import (
 # template. VTVIK is A4-sized like MLOVE, so no page-height juggling is
 # needed here.
 
-TABLE_LEFT = 35
-TABLE_WIDTH = 525
+TABLE_LEFT = 34.77
+TABLE_WIDTH = 525.74
 
-# Airport full names ForeFlight's export never carries - extend as new
-# airports show up. Falls back to just the ICAO code when unknown.
+# Airport full names ForeFlight's export never carries. Kept in sync with
+# default1.py's own table - both fall back further, to the nearest navaid
+# city the navlog itself carries, for anything not listed here.
 AIRPORT_NAME_LOOKUP = {
-    "VOTP": "TIRUPATI",
-    "VOHY": "BEGUMPET",
+    "VAAH": "AHMEDABAD",
+    "VAHS": "HIRASAR",
+    "VABO": "VADODARA",
+    "VABB": "MUMBAI",
+    "VOMM": "CHENNAI",
+    "VOBL": "BENGALURU",
+    "VOBG": "BENGALURU",
     "VIDP": "DELHI",
     "VECC": "KOLKATA",
+    "VOHY": "BEGUMPET",
+    "VOHS": "HYDERABAD",
+    "VOTP": "TIRUPATI",
+    "VILK": "LUCKNOW",
+    "VEBS": "BHUBANESWAR",
+    "VERC": "RANCHI",
+    "VOCI": "KOCHI",
+    "VOTV": "TRIVANDRUM",
+    "VOGO": "GOA",
+    "VANP": "NAGPUR",
+    "VOMD": "MADURAI",
+    "VEBN": "VARANASI",
+    "VIJP": "JAIPUR",
+    "VAPO": "PUNE",
+    "VOCB": "COIMBATORE",
+    "VEGY": "GAYA",
+    "VEGT": "GUWAHATI",
+    "VIAR": "AMRITSAR",
+    "VOML": "MANGALORE",
+    "VOVZ": "VISAKHAPATNAM",
+    "VEPT": "PATNA",
+    "VAID": "INDORE",
+    "VABP": "BHOPAL",
+    "VOTR": "TIRUCHIRAPPALLI",
+    "VOBZ": "VIJAYAWADA",
+    "VARK": "RAJKOT",
 }
+
+
+def _navaid_city(rows, from_end=False):
+    """ForeFlight prints the nearest navaid's city against each waypoint
+    ("AHMEDABAD 113.1") - the first on the route is the departure city and
+    the last the destination city. Same fallback default1.py uses."""
+    ordered = list(reversed(rows)) if from_end else list(rows)
+
+    for row in ordered:
+        detail = value(row.get("waypointDetail"))
+        if not detail:
+            continue
+        word = detail.split()[0]
+        if word.replace(".", "").isdigit():
+            continue
+        return word.upper()
+
+    return ""
+
+
+def _city_name(code, rows, from_end=False):
+    code = value(code)
+    return AIRPORT_NAME_LOOKUP.get(code.upper()) or _navaid_city(rows, from_end=from_end)
+
+
+def _wrap(content, size, max_width, font=FONT_NAME):
+    """Word-wraps content to max_width at size - same greedy algorithm
+    default1.py's own _wrap uses, since VTVIK's PLN PROFILE/alternate
+    route text wraps onto reference PDF the same way."""
+    words = str(content or "").split()
+    if not words:
+        return []
+
+    lines = []
+    current = words[0]
+    for word in words[1:]:
+        trial = f"{current} {word}"
+        if stringWidth(trial, font, size) <= max_width:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _underscore_row(pdf, label, gap_before, gap_after, underscore_count, val, x0, y, size=9.4):
+    """The DEP/ARR ATIS-CLEARANCE rows aren't drawn lines at all in the
+    reference PDF - they're a single text string with a literal
+    underscore fill for the operator to write into by hand. When actual
+    operational data exists, it's overlaid starting where the fill
+    begins."""
+    prefix = f"{label}{' ' * gap_before}:{' ' * gap_after}"
+    write(pdf, f"{prefix}{'_' * underscore_count}", x0 - 2, y, 500, {"size": size, "lineBreak": False})
+
+    v = value(val)
+    if v:
+        overlay_x = x0 + stringWidth(prefix, FONT_NAME, size)
+        write(pdf, v, overlay_x - 2, y, underscore_count * 10, {"size": size, "lineBreak": False})
 
 
 def _space_fl(s):
@@ -58,6 +150,28 @@ def _cruise_tail(profile_text):
     found (still better than nothing)."""
     match = re.search(r"@\s*FL\d+\s*-\s*(.+)$", value(profile_text), re.IGNORECASE)
     return match.group(1).strip() if match else value(profile_text)
+
+
+def _drop_origin_row(rows):
+    """An alternate plan starts where the main route ended, so ForeFlight
+    repeats that airport as the block's own origin row - no heading, no
+    course. The operator's sheet leaves it out (same quirk default1.py's
+    own alternate blocks have)."""
+    if rows and not value(rows[0].get("heading")).strip(" -"):
+        return rows[1:]
+    return rows
+
+
+def _rank(name):
+    """PIC/FO print with a "CAPT" prefix unless the operator already typed
+    one - the same convention every other template applies at render
+    time (claude.py stores the bare name)."""
+    name = value(name).upper()
+    if not name:
+        return ""
+    if re.match(r"^(CAPT|CPT|CMDR|MR|MS|MRS|FO|F/O)\b", name):
+        return name
+    return f"CAPT {name}"
 
 
 def draw_page_one(pdf, data):
@@ -76,7 +190,9 @@ def draw_page_one(pdf, data):
     reg_val = header.get("registration") or flight.get("registration", "")
     route_header(pdf, route_title, reg_val)
 
-    box(pdf, TABLE_LEFT, 33, TABLE_WIDTH, 775)
+    # Frame box measured directly off the reference PDF's own rect (same
+    # frame default1.py uses: x 34.39-560.89, y 34.39-806.00).
+    box(pdf, 34.39, 34.39, 526.5, 771.61)
 
     ac_type = find_value(header, flight, atc, "aircraftType", "type", "acType")
     date_str = flight.get("date", "")
@@ -84,86 +200,104 @@ def draw_page_one(pdf, data):
     eta = time_info.get("eta", "")
 
     banner = f"- - - - - {reg_val} ({ac_type}) {date_str} NAV LOG/ OPS FPL FOR ETD {etd} (ETA {eta}) - - - - -"
-    write(pdf, banner, TABLE_LEFT, 41, TABLE_WIDTH, {"size": 8.5, "align": "center", "lineBreak": False})
+    write(pdf, banner, TABLE_LEFT, 47.43, TABLE_WIDTH, {"size": 9.4, "align": "center", "lineBreak": False})
 
-    dep_code = flight.get("departure", "")
-    dest_code = flight.get("destination", "")
-    dep_disp = f"{dep_code} - {AIRPORT_NAME_LOOKUP[dep_code]}" if dep_code in AIRPORT_NAME_LOOKUP else dep_code
-    dest_disp = f"{dest_code} - {AIRPORT_NAME_LOOKUP[dest_code]}" if dest_code in AIRPORT_NAME_LOOKUP else dest_code
+    main_navlog = data.get("mainNavlog", [])
+    dep_code = value(flight.get("departure", ""))
+    dest_code = value(flight.get("destination", ""))
+    dep_name = _city_name(dep_code, main_navlog)
+    dest_name = _city_name(dest_code, main_navlog, from_end=True)
 
     dist_val = value(time_info.get("plannedRouteDistance"))
     track_val = value(time_info.get("track"))
     track_disp = f"{track_val} DEG" if track_val else ""
     pax_val = weight.get("pax", "")
 
-    write(pdf, "DEP", 50, 61, 25, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 77, 61, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, dep_disp, 83, 61, 155, {"size": 8.5, "lineBreak": False})
+    # ---- DEP/DEST + DIST/CRUISE + TRACK/PAX ----
+    write(pdf, "DEP", 48.52, 69.40, 25, {"size": 9.4, "lineBreak": False})
+    write(pdf, f":{dep_code}", 74.95, 69.40, 45, {"size": 9.4, "lineBreak": False})
+    if dep_name:
+        write(pdf, f"-{dep_name}", 112.98, 69.40, 140, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "DIST", 251, 60, 25, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 302, 60, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, dist_val, 310, 60, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "DIST", 249.22, 66.06, 25, {"size": 9.4, "lineBreak": False})
+    write(pdf, ":", 300.21, 66.06, 8, {"size": 9.4, "lineBreak": False})
+    write(pdf, dist_val, 308.08, 66.06, 60, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "TRACK", 452, 61, 35, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 487, 61, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, track_disp, 492, 61, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, f"TRACK:{track_disp}", 449.92, 69.40, 100, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "DEST", 50, 77, 25, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 77, 77, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, dest_disp, 83, 77, 155, {"size": 8.5, "lineBreak": False})
+    write(pdf, "DEST", 48.52, 83.54, 25, {"size": 9.4, "lineBreak": False})
+    write(pdf, f":{dest_code}", 74.95, 83.54, 45, {"size": 9.4, "lineBreak": False})
+    if dest_name:
+        write(pdf, f"-{dest_name}", 112.98, 83.54, 140, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "CRUISE", 251, 77, 30, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 302, 77, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, "PAX", 452, 77, 20, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 487, 77, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, pax_val, 492, 77, 40, {"size": 8.5, "lineBreak": False})
+    write(pdf, "CRUISE", 249.22, 83.54, 30, {"size": 9.4, "lineBreak": False})
+    write(pdf, ":", 300.21, 83.54, 8, {"size": 9.4, "lineBreak": False})
 
-    cruise_text = value(misc.get("plannedProfile")).upper()
-    write(pdf, cruise_text, 310, 82, 155, {"size": 7.5})
+    write(pdf, "PAX", 449.92, 83.54, 20, {"size": 9.4, "lineBreak": False})
+    write(pdf, f":{pax_val}", 484.69, 83.54, 40, {"size": 9.4, "lineBreak": False})
+
+    # The PLN PROFILE text word-wraps across the DIST/CRUISE value column,
+    # same as default1.py's own CRUISE wrap (just a narrower, 2-row-tall
+    # slot here rather than a dedicated 4-line block).
+    cruise_lines = _wrap(value(misc.get("plannedProfile")).upper(), 7.5, 140.0)
+    cruise_y = 78.42
+    for cruise_line in cruise_lines[:3]:
+        write(pdf, cruise_line, 308.08, cruise_y, 155, {"size": 7.5, "lineBreak": False})
+        cruise_y += 8.91
 
     flight_level = flight.get("flightLevel", "")
     main_route_str = f"{flight_level} - {_cruise_tail(misc.get('plannedProfile'))} {data.get('routes', {}).get('mainRoute', '')}".strip()
-    write(pdf, f"MAIN ROUTE : {main_route_str}", TABLE_LEFT + 13, 100, TABLE_WIDTH - 20, {"size": 8.5, "lineBreak": False})
+    write(pdf, f"MAIN ROUTE : {main_route_str}", 46.27, 106.27, TABLE_WIDTH - 20, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "PIC", TABLE_LEFT + 13, 117, 20, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 65, 117, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, flight.get("pic", ""), 70, 117, 220, {"size": 8.5, "lineBreak": False})
-
-    write(pdf, "FO", 299, 117, 15, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 313, 117, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, flight.get("fo", ""), 318, 117, 220, {"size": 8.5, "lineBreak": False})
+    write(pdf, f"PIC : {_rank(flight.get('pic'))}".rstrip(), 46.27, 123.41, 240, {"size": 9.4, "lineBreak": False})
+    write(pdf, f"FO : {_rank(flight.get('fo'))}".rstrip(), 297.14, 123.41, 240, {"size": 9.4, "lineBreak": False})
 
     # ---- Computed fuel & weights ----
-    fuel_pairs = [
-        ("COMPUTED FUEL", fuel.get("computedFuel"), "BLOCK FUEL", fuel.get("ramp")),
-        ("MIN. TRIP FUEL", fuel.get("minTripFuel"), "TAKE OFF FUEL", fuel.get("takeoff")),
-        ("MAX. TRIP FUEL", fuel.get("maxTripFuel"), "LANDING FUEL", fuel.get("landing")),
-        ("TOP CLIMB TEMP", _space_fl(time_info.get("topClimbTemp")), "WIND", value(time_info.get("averageWinds")).upper()),
-    ]
-    rows_y = [138, 152, 166, 180]
-    for (l1, v1, l2, v2), y in zip(fuel_pairs, rows_y):
-        write(pdf, l1, 50, y, 80, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 131, y, 8, {"size": 8.5, "lineBreak": False})
-        v1_disp = f"{value(v1)} LBS" if v1 not in (None, "") and "TEMP" not in l1 else value(v1)
-        write(pdf, v1_disp, 137, y, 78, {"size": 8.5, "align": "right", "lineBreak": False})
+    # COMPUTED FUEL is the RAMP figure and BLOCK FUEL is Flight Fuel - the
+    # same "ramp"/"flight" keys every other plan-time template reads.
+    # (Previously read "computedFuel"/"ramp" here, which happened to read
+    # blank/wrong values because VTVIK didn't populate "required" fuel
+    # until it joined PLAN_TIME_TEMPLATES - now that it does, the mismatch
+    # became visible: COMPUTED FUEL was showing MIN. TRIP FUEL's own
+    # figure instead of RAMP.)
+    landing_fuel = find_value(fuel, "landingReported") or value(fuel.get("landing"))
 
-        write(pdf, l2, 301, y, 74, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 375, y, 8, {"size": 8.5, "lineBreak": False})
-        v2_disp = f"{value(v2)} LBS" if v2 not in (None, "") and l2 != "WIND" else value(v2)
-        write(pdf, v2_disp, 381, y, 89, {"size": 8.5, "align": "right", "lineBreak": False})
+    fuel_pairs = [
+        ("COMPUTED FUEL", fuel.get("ramp"), "BLOCK FUEL", fuel.get("flight")),
+        ("MIN. TRIP FUEL", fuel.get("minTripFuel"), "TAKE OFF FUEL", fuel.get("takeoff")),
+        ("MAX. TRIP FUEL", fuel.get("maxTripFuel"), "LANDING FUEL", landing_fuel),
+    ]
+    fuel_rows_y = [144.30, 158.43, 172.57]
+    for (l1, v1, l2, v2), y in zip(fuel_pairs, fuel_rows_y):
+        write(pdf, l1, 48.52, y, 90, {"size": 9.4, "lineBreak": False})
+        write(pdf, ":", 128.86, y, 8, {"size": 9.4, "lineBreak": False})
+        v1_disp = f"{value(v1)} LBS" if v1 not in (None, "") else ""
+        write(pdf, v1_disp, 137, y, 78.06, {"size": 9.4, "align": "right", "lineBreak": False})
+
+        write(pdf, l2, 299.39, y, 74, {"size": 9.4, "lineBreak": False})
+        write(pdf, ":", 373.21, y, 8, {"size": 9.4, "lineBreak": False})
+        v2_disp = f"{value(v2)} LBS" if v2 not in (None, "") else ""
+        write(pdf, v2_disp, 391.16, y, 78.39, {"size": 9.4, "align": "right", "lineBreak": False})
+
+    # TOP CLIMB TEMP/WIND is a genuinely different row shape from the three
+    # above it - label+colon+value all run together with no value column.
+    write(pdf, f"TOP CLIMB TEMP:{_space_fl(time_info.get('topClimbTemp'))}", 48.52, 186.71, 240, {"size": 9.4, "lineBreak": False})
+    write(pdf, "WIND", 299.39, 186.71, 30, {"size": 9.4, "lineBreak": False})
+    write(pdf, ":", 373.21, 186.71, 8, {"size": 9.4, "lineBreak": False})
+    write(pdf, value(time_info.get("averageWinds")).upper(), 391.16, 186.71, 78.39, {"size": 9.4, "align": "right", "lineBreak": False})
 
     write(
         pdf,
-        "- - - - - - - - PLAN TIME & FUEL - - - - - - - - - - - - - - - - - - - - - - - - - - - - - PLAN WT (in LBS) - - - - - - - - - - - - - - - -",
+        "- - - - - - - - PLAN TIME & FUEL - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - PLAN WT (in LBS) - - - - - - - - - - - - - - -",
         TABLE_LEFT,
-        199,
+        205.35,
         TABLE_WIDTH,
-        {"size": 8, "align": "center", "lineBreak": False},
+        {"size": 9.4, "align": "center", "lineBreak": False},
     )
 
     plan_rows = [
         ("TRIP", fuel.get("trip"), find_value(fuel, "tripTime", "trip_time")),
-        ("TAXI", fuel.get("taxi"), ""),
+        ("TAXI", fuel.get("taxi"), find_value(fuel, "taxiTime", "taxi_time")),
         ("CONTINGENCY 5%", fuel.get("contingency"), find_value(fuel, "contingencyTime", "contingency_time")),
         ("FINAL RESERVE FUEL", fuel.get("finalReserve"), find_value(fuel, "finalReserveTime", "final_reserve_time")),
         ("XTRA", fuel.get("extra"), find_value(fuel, "extraEndurance", "extra_endurance")),
@@ -177,199 +311,263 @@ def draw_page_one(pdf, data):
         ("T.OFF WT", weight.get("takeoffWeight")),
         ("LAND WT", weight.get("estimatedLandingWeight")),
     ]
-    plan_rows_y = [218, 232, 246, 260, 274, 288, 302]
-    weight_rows_y = [218, 232, 246, 260, 274]
+    # One consistent 14.14pt-step grid runs from TRIP all the way down
+    # through ENDURANCE (row 8) - the blank dashed divider (row 7) and
+    # ENDURANCE are just further rows on the same grid, not separate
+    # hand-placed elements.
+    grid_y = [223.98 + 14.14 * i for i in range(9)]
+    plan_rows_y = grid_y[:7]
+    weight_rows_y = grid_y[:5]
 
     for (label, fuel_val, time_val), y in zip(plan_rows, plan_rows_y):
-        write(pdf, label, 50, y, 100, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 151, y, 8, {"size": 8.5, "lineBreak": False})
-        write(pdf, time_val, 161, y, 35, {"size": 8.5, "lineBreak": False})
+        write(pdf, label, 48.52, y, 100, {"size": 9.4, "lineBreak": False})
+        write(pdf, ":", 148.91, y, 8, {"size": 9.4, "lineBreak": False})
+        write(pdf, time_val, 159.21, y, 35, {"size": 9.4, "lineBreak": False})
         fuel_disp = f"{value(fuel_val)} LBS" if fuel_val not in (None, "") else ""
-        write(pdf, fuel_disp, 190, y, 48, {"size": 8.5, "align": "right", "lineBreak": False})
+        write(pdf, fuel_disp, 157, y, 78.4, {"size": 9.4, "align": "right", "lineBreak": False})
 
-    for (label, val), y in zip(weight_rows, weight_rows_y):
-        write(pdf, label, 301, y, 60, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 361, y, 8, {"size": 8.5, "lineBreak": False})
-        val_disp = f"{value(val)} LBS" if val not in (None, "") else ""
-        write(pdf, val_disp, 367, y, 54, {"size": 8.5, "align": "right", "lineBreak": False})
+    for (label, w_val), y in zip(weight_rows, weight_rows_y):
+        write(pdf, label, 299.39, y, 60, {"size": 9.4, "lineBreak": False})
+        write(pdf, ":", 359.07, y, 8, {"size": 9.4, "lineBreak": False})
+        val_disp = f"{value(w_val)} LBS" if w_val not in (None, "") else ""
+        write(pdf, val_disp, 342, y, 78.94, {"size": 9.4, "align": "right", "lineBreak": False})
 
     alt1 = alternates[0] if len(alternates) > 0 else {}
     alt2 = alternates[1] if len(alternates) > 1 else {}
 
-    write(pdf, "ALTN", 301, 291, 30, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 329, 291, 8, {"size": 8.5, "lineBreak": False})
     alt1_dist = field(alt1, "distance")
     if alt1_dist and not alt1_dist.upper().endswith("NM"):
         alt1_dist = f"{alt1_dist}NM"
-    write(pdf, alt1_dist, 334, 291, 40, {"size": 8.5, "lineBreak": False})
-
     min_divert = fuel.get("minDivertFuel")
-    write(pdf, "MIN DIVERT FUEL:", 384, 291, 90, {"size": 8.5, "lineBreak": False})
-    write(pdf, f"{value(min_divert)} LBS" if min_divert not in (None, "") else "", 470, 291, 60, {"size": 8.5, "lineBreak": False})
+    min_divert_disp = f"{value(min_divert)} LBS" if min_divert not in (None, "") else ""
+    write(
+        pdf,
+        f"ALTN : {alt1_dist}         MIN DIVERT FUEL: {min_divert_disp}",
+        299.39, 297.67, 250,
+        {"size": 9.4, "lineBreak": False},
+    )
 
-    write(pdf, "FIRST ALTN ROUTE :", 301, 305, 100, {"size": 8.5, "lineBreak": False})
-    write(pdf, value(field(alt1, "route")).replace("Route", "").strip(), 395, 305, 150, {"size": 8.5, "lineBreak": False})
+    first_route = value(field(alt1, "route")).replace("Route", "").strip()
+    write(pdf, f"FIRST ALTN ROUTE : {first_route}", 299.39, 311.81, 250, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "SECOND ALTN ROUTE :", 301, 320, 105, {"size": 8.5, "lineBreak": False})
-    write(pdf, value(field(alt2, "route")).replace("Route", "").strip(), 407, 320, 150, {"size": 8.5, "lineBreak": False})
+    # SECOND ALTN ROUTE wraps onto a second line (sharing ENDURANCE's own
+    # row, on the right half where ENDURANCE has no content) when the
+    # route string is long - matching default1.py's own equivalent wrap.
+    second_route = value(field(alt2, "route")).replace("Route", "").strip()
+    second_lines = _wrap(f"SECOND ALTN ROUTE : {second_route}", 9.4, 210.0)
+    route2_y = 325.95
+    for route_line in second_lines[:2]:
+        write(pdf, route_line, 299.39, route2_y, 250, {"size": 9.4, "lineBreak": False})
+        route2_y += 11.13
 
-    line(pdf, 161, 322, 233, 322)
-    write(pdf, "ENDURANCE", 90, 331, 60, {"size": 8.5, "lineBreak": False})
-    write(pdf, ":", 151, 331, 8, {"size": 8.5, "lineBreak": False})
-    write(pdf, fuel.get("enduranceTime", ""), 161, 331, 35, {"size": 8.5, "lineBreak": False})
-    computed_fuel = fuel.get("computedFuel")
-    write(pdf, f"{value(computed_fuel)} LBS" if computed_fuel not in (None, "") else "", 195, 331, 43, {"size": 8.5, "align": "right", "lineBreak": False})
+    write(pdf, "-" * 22, 159.21, grid_y[7], 100, {"size": 9.4, "lineBreak": False})
+
+    write(pdf, "ENDURANCE:", 88.11, grid_y[8], 80, {"size": 9.4, "lineBreak": False})
+    write(pdf, fuel.get("enduranceTime", ""), 159.21, grid_y[8], 35, {"size": 9.4, "lineBreak": False})
+    # ENDURANCE's fuel figure is the same RAMP value COMPUTED FUEL shows,
+    # not the separate "computedFuel" key (see the fuel_pairs note above).
+    computed_fuel = fuel.get("ramp")
+    endurance_fuel_disp = f"{value(computed_fuel)} LBS" if computed_fuel not in (None, "") else ""
+    write(pdf, endurance_fuel_disp, 157, grid_y[8], 78.4, {"size": 9.4, "align": "right", "lineBreak": False})
 
     # ---- Different level calculation / actuals ----
     write(
         pdf,
         "- - - - - - - - - DIFFERENT LEVEL CALCULATION - - - - - - - - - - - - - - - - - - - - - - - - - - ACTUALS - - - - - - - - - - - - - - - - - - -",
         TABLE_LEFT,
-        350,
+        355.72,
         TABLE_WIDTH,
-        {"size": 8, "align": "center", "lineBreak": False},
+        {"size": 9.4, "align": "center", "lineBreak": False},
     )
 
-    write(pdf, "FL", 57, 378, 20, {"size": 8.5, "bold": True, "lineBreak": False})
-    write(pdf, "WC", 104, 378, 20, {"size": 8.5, "bold": True, "lineBreak": False})
-    write(pdf, "TIME", 140, 378, 30, {"size": 8.5, "bold": True, "lineBreak": False})
-    write(pdf, "TRIP", 196, 378, 30, {"size": 8.5, "bold": True, "lineBreak": False})
+    write(pdf, "FL", 63.41, 384.16, 20, {"size": 9.4, "lineBreak": False})
+    write(pdf, "WC", 99.54, 384.16, 20, {"size": 9.4, "lineBreak": False})
+    write(pdf, "TIME", 137.76, 384.16, 30, {"size": 9.4, "lineBreak": False})
+    write(pdf, "TRIP", 194.01, 384.16, 30, {"size": 9.4, "lineBreak": False})
 
-    level_rows_y = [392, 406, 420, 434, 448]
+    level_rows_y = [398.30 + 14.14 * i for i in range(5)]
     for row, y in zip(level_calcs[:5], level_rows_y):
         fl_disp = value(row.get("fl"))
         if fl_disp and not fl_disp.upper().startswith("FL"):
             fl_disp = f"FL {fl_disp}"
-        write(pdf, fl_disp, 57, y, 30, {"size": 8.5, "lineBreak": False})
-        write(pdf, row.get("wc", ""), 104, y, 25, {"size": 8.5, "lineBreak": False})
-        write(pdf, row.get("time", ""), 140, y, 40, {"size": 8.5, "lineBreak": False})
+        write(pdf, fl_disp, 55.21, y, 30, {"size": 9.4, "lineBreak": False})
+        write(pdf, row.get("wc", ""), 101.88, y, 25, {"size": 9.4, "lineBreak": False})
+        write(pdf, row.get("time", ""), 136.20, y, 40, {"size": 9.4, "lineBreak": False})
         trip_val = value(row.get("trip"))
-        write(pdf, f"{trip_val} LBS" if trip_val else "", 186, y, 45, {"size": 8.5, "lineBreak": False})
+        write(pdf, f"{trip_val} LBS" if trip_val else "", 185.03, y, 45, {"size": 9.4, "lineBreak": False})
 
-    actuals_left = [
-        ("PAX", 375), ("CREW", 396), ("SOB", 417), ("FIC", 438), ("ADC", 458),
+    # ACTUALS is a fixed 3x5 grid of "LABEL: _________" fields for the crew
+    # to fill in by hand post-flight - not drawn lines, and each cell sits
+    # at its own hand-placed x0 (the reference doesn't align them to a
+    # shared left margin).
+    actuals = [
+        ("PAX", 263.63, 381.11), ("CREW", 255.29, 402.00), ("SOB", 264.14, 422.88),
+        ("FIC", 267.79, 443.77), ("ADC", 262.59, 464.66),
+        ("ON BLK FUEL", 346.76, 381.11), ("OFF BLK FUEL", 343.11, 402.00),
+        ("FUEL USED", 356.92, 422.88), ("BTIME", 378.01, 464.66),
+        ("C/OFF", 466.41, 381.11), ("T/O", 477.36, 402.00), ("LDG", 473.20, 422.88),
+        ("C/ON", 470.07, 443.77), ("F/T", 478.92, 464.66),
     ]
-    for label, y in actuals_left:
-        write(pdf, label, 264, y, 30, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 285, y, 8, {"size": 8.5, "lineBreak": False})
-        line(pdf, 291, y + 8, 332, y + 8)
-
-    actuals_mid = [
-        ("ON BLK FUEL", 375), ("OFF BLK FUEL", 396), ("FUEL USED", 417), ("BTIME", 458),
-    ]
-    for label, y in actuals_mid:
-        write(pdf, label, 347, y, 65, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 410, y, 8, {"size": 8.5, "lineBreak": False})
-        line(pdf, 416, y + 8, 457, y + 8)
-
-    actuals_right = [
-        ("C/OFF", 375), ("T/O", 396), ("LDG", 417), ("C/ON", 438), ("F/T", 458),
-    ]
-    for label, y in actuals_right:
-        write(pdf, label, 466, y, 30, {"size": 8.5, "align": "right", "lineBreak": False})
-        write(pdf, ":", 496, y, 8, {"size": 8.5, "lineBreak": False})
-        line(pdf, 501, y + 8, 543, y + 8)
+    for label, x0, y in actuals:
+        write(pdf, f"{label}: _________", x0 - 2, y, 130, {"size": 9.4, "lineBreak": False})
 
     # ---- ATIS / clearance / runway / V-speed blocks (dep + arr) ----
-    line(pdf, TABLE_LEFT, 476, TABLE_LEFT + TABLE_WIDTH, 476)
-
-    def atis_block(prefix, atis_key, clearance_key, taxi_key, y0, operational):
-        labelled_value(pdf, f"{prefix} ATIS", operational.get(atis_key), TABLE_LEFT, y0, 55, TABLE_WIDTH - 10)
-        labelled_value(pdf, f"{prefix} CLEARANCE", operational.get(clearance_key), TABLE_LEFT, y0 + 19, 90, TABLE_WIDTH - 10)
-        labelled_value(pdf, "TAXI CLEARANCE", operational.get(taxi_key), TABLE_LEFT, y0 + 37, 95, TABLE_WIDTH - 10)
-
-        rwy_y = y0 + 56
-        write(pdf, "RWY", TABLE_LEFT + 13, rwy_y, 25, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 77, rwy_y, 8, {"size": 8.5, "lineBreak": False})
-        line(pdf, 82, rwy_y + 8, 134, rwy_y + 8)
-        write(pdf, "FLAPS", 143, rwy_y, 32, {"size": 8.5, "lineBreak": False})
-        write(pdf, ":", 178, rwy_y, 8, {"size": 8.5, "lineBreak": False})
-        line(pdf, 184, rwy_y + 8, 235, rwy_y + 8)
-        write(pdf, "RWY: DRY / WET / CONT   A/I: OFF/ON", 245, rwy_y, 220, {"size": 8.5, "lineBreak": False})
-
-        v_y = rwy_y + 22
-        v_labels = ["V1", "VR", "V2", "Vapp", "VFS"]
-        v_x = [50, 139, 231, 321, 420]
-        for label, x in zip(v_labels, v_x):
-            write(pdf, f"{label}:", x, v_y, 30, {"size": 8.5, "lineBreak": False})
-            line(pdf, x + (24 if len(label) <= 2 else 32), v_y + 8, x + (24 if len(label) <= 2 else 32) + 68, v_y + 8)
-
-        return v_y + 18
-
+    # None of this section is drawn with real line()/box() calls in the
+    # reference PDF - every rule and fill-in blank is a literal dash or
+    # underscore text string, which is why labelled_value()/line() never
+    # matched it no matter how the coordinates were tuned.
+    divider = ("- " * 85).strip()
     operational = page1.get("operational", {})
-    y_after_dep = atis_block("DEP", "departureAtis", "departureClearance", "depTaxiClearance", 491, operational)
-    line(pdf, TABLE_LEFT, y_after_dep, TABLE_LEFT + TABLE_WIDTH, y_after_dep)
-    y_after_arr = atis_block("ARR", "arrivalAtis", "arrivalClearance", "arrTaxiClearance", y_after_dep + 15, operational)
-    line(pdf, TABLE_LEFT, y_after_arr, TABLE_LEFT + TABLE_WIDTH, y_after_arr)
 
-    labelled_value(pdf, "DEST ALTNATIS", operational.get("destAltnAtis"), TABLE_LEFT - 2, y_after_arr + 16, 70, TABLE_WIDTH - 10)
+    write(pdf, divider, TABLE_LEFT, 481.80, TABLE_WIDTH, {"size": 9.4, "align": "center", "lineBreak": False})
 
-    line(pdf, TABLE_LEFT, 727, TABLE_LEFT + TABLE_WIDTH, 727, 1.2)
+    _underscore_row(pdf, "DEP ATIS", 4, 4, 81, operational.get("departureAtis"), 48.27, 496.68)
+    _underscore_row(pdf, "DEP CLEARANCE", 4, 4, 74, operational.get("departureClearance"), 48.27, 515.32)
+    _underscore_row(pdf, "TAXI CLEARANCE", 4, 4, 73, operational.get("depTaxiClearance"), 48.27, 533.96)
+
+    write(
+        pdf,
+        "RWY   : ___________    FLAPS   : ___________    RWY: DRY / WET / CONT    A/I: OFF/ON",
+        46.27, 552.60, TABLE_WIDTH, {"size": 9.4, "lineBreak": False},
+    )
+    write(
+        pdf,
+        "V1:_______________VR:_______________V2:_______________Vapp:_______________VFS:",
+        46.27, 574.23, TABLE_WIDTH, {"size": 9.4, "lineBreak": False},
+    )
+    # VFS's own 15-underscore fill sits 1.5pt lower than the row's main
+    # baseline - the same quirk default1.py's VREF row has.
+    write(pdf, "_" * 15, 440.98, 575.73, 100, {"size": 9.4, "lineBreak": False})
+
+    write(pdf, divider, TABLE_LEFT, 592.12, TABLE_WIDTH, {"size": 9.4, "align": "center", "lineBreak": False})
+
+    _underscore_row(pdf, "ARR ATIS", 4, 4, 73, operational.get("arrivalAtis"), 48.27, 607.01)
+    _underscore_row(pdf, "ARR CLEARANCE", 4, 4, 73, operational.get("arrivalClearance"), 48.27, 625.65)
+    _underscore_row(pdf, "TAXI CLEARANCE", 4, 4, 73, operational.get("arrTaxiClearance"), 48.27, 644.28)
+
+    write(
+        pdf,
+        "RWY   : ___________    FLAPS   : ___________    RWY: DRY / WET / CONT    A/I: OFF/ON",
+        46.27, 662.92, TABLE_WIDTH, {"size": 9.4, "lineBreak": False},
+    )
+    write(
+        pdf,
+        "V1:_______________VR:_______________V2:_______________Vapp:_______________VFS:",
+        46.27, 684.56, TABLE_WIDTH, {"size": 9.4, "lineBreak": False},
+    )
+    write(pdf, "_" * 15, 440.98, 686.06, 100, {"size": 9.4, "lineBreak": False})
+
+    write(pdf, divider, TABLE_LEFT, 702.45, TABLE_WIDTH, {"size": 9.4, "align": "center", "lineBreak": False})
+
+    dest_altn = value(operational.get("destAltnAtis"))
+    write(
+        pdf,
+        f"DEST ALTNATIS :{(' ' + dest_altn) if dest_altn else ''}",
+        44.02, 713.58, TABLE_WIDTH, {"size": 9.4, "lineBreak": False},
+    )
 
     write(
         pdf,
         "I certify that all my licenses, ratings etc are current / valid and I am legally/ medically fit for operating flight.",
         TABLE_LEFT,
-        740,
+        740.86,
         TABLE_WIDTH,
-        {"size": 8.5, "align": "center", "lineBreak": False},
+        {"size": 9.0, "align": "center", "lineBreak": False},
     )
 
-    write(pdf, "PILOT SIGN :", TABLE_LEFT + 13, 755, 70, {"size": 8.5, "lineBreak": False})
-    write(pdf, "LICS NO :", TABLE_LEFT + 13, 767, 70, {"size": 8.5, "lineBreak": False})
-    write(pdf, "BA NO :", TABLE_LEFT + 13, 779, 70, {"size": 8.5, "lineBreak": False})
+    write(pdf, "PILOT SIGN :", 46.27, 756.41, 70, {"size": 9.4, "lineBreak": False})
+    write(pdf, "LICS NO :", 46.27, 768.30, 70, {"size": 9.4, "lineBreak": False})
+    write(pdf, "BA NO :", 46.27, 779.44, 70, {"size": 9.4, "lineBreak": False})
 
-    write(pdf, "COPILOT SIGN :", 314, 755, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "LICS NO :", 314, 767, 70, {"size": 8.5, "lineBreak": False})
-    write(pdf, "BA NO :", 314, 779, 70, {"size": 8.5, "lineBreak": False})
+    write(pdf, "COPILOT SIGN :", 347.31, 756.79, 80, {"size": 9.4, "lineBreak": False})
+    write(pdf, "LICS NO :", 347.31, 767.92, 70, {"size": 9.4, "lineBreak": False})
+    write(pdf, "BA NO :", 347.31, 779.06, 70, {"size": 9.4, "lineBreak": False})
 
 
 # --------------------------------------------------
-# NAVLOG TABLE (PAGES 2 & 3) - same column model as MLOVE/VTBBD, just
-# a wider table (525pt) starting at x=35 to match VTVIK's own frame.
+# NAVLOG TABLE (PAGES 2 & 3)
 # --------------------------------------------------
+# Column keys/order/top-bottom titles match NAV_COLUMNS exactly (confirmed
+# against the reference PDF's own header text), but the widths and font
+# size are VTVIK's own - measured directly off the reference's column-
+# divider grid lines rather than reusing MLOVE/VTBBD's proportions.
+
+VTVIK_COLUMN_WIDTHS = {
+    "waypoint": 113.83,
+    "heading": 31.58,
+    "flightLevel": 38.27,
+    "windDirectionSpeed": 51.66,
+    "isa": 25.43,
+    "tas": 31.64,
+    "legDistance": 36.55,
+    "fuelUsed": 40.04,
+    "ete": 28.08,
+    "legTimeRemaining": 31.58,
+    "eta": 35.43,
+    "actualFuel": 61.65,
+}
+
+
+def _header_text_y(box_top, box_height, line_count):
+    # Empirically measured off the reference: a single line centers at
+    # box_top + box_height/2 + 5.22, and each additional line pushes the
+    # first line up by half of an 11.16pt line gap.
+    return box_top + box_height / 2 + 5.22 - (line_count - 1) * 5.58
 
 
 def _draw_table_header(pdf, y):
     x = TABLE_LEFT
-    top_header_height = 18
-    bottom_header_height = 34
+    top_header_height = 33.52
+    bottom_header_height = 33.64
     total_header_height = top_header_height + bottom_header_height
-    font_size = 7.5
+    font_size = 9.4
 
-    scale = TABLE_WIDTH / 496.0
     idx = 0
     while idx < len(NAV_COLUMNS):
-        key, top_title, bottom_title, base_width = NAV_COLUMNS[idx]
-        width = base_width * scale
+        key, top_title, bottom_title, _ = NAV_COLUMNS[idx]
+        width = VTVIK_COLUMN_WIDTHS[key]
 
         if top_title:
             span_width = width
             next_idx = idx + 1
             while next_idx < len(NAV_COLUMNS) and NAV_COLUMNS[next_idx][1] == top_title:
-                span_width += NAV_COLUMNS[next_idx][3] * scale
+                span_width += VTVIK_COLUMN_WIDTHS[NAV_COLUMNS[next_idx][0]]
                 next_idx += 1
 
             box(pdf, x, y, span_width, top_header_height)
-            write(pdf, top_title, x + 2, y + 12, span_width - 4, {"size": font_size, "align": "center", "lineBreak": False})
+            # A two-word top title ("SPD KT", "DIST NM", "FUEL LB") stacks
+            # onto two lines in the reference rather than staying on one.
+            top_lines = top_title.replace(" ", "\n")
+            top_line_count = top_lines.count("\n") + 1
+            top_text_y = _header_text_y(y, top_header_height, top_line_count)
+            write(pdf, top_lines, x + 2, top_text_y, span_width - 4, {"size": font_size, "align": "center"})
 
             sub_x = x
+            bottom_box_top = y + top_header_height
             for sub_i in range(idx, next_idx):
-                _, _, s_bottom, s_base_width = NAV_COLUMNS[sub_i]
-                s_width = s_base_width * scale
-                box(pdf, sub_x, y + top_header_height, s_width, bottom_header_height)
-                line_count = value(s_bottom).count("\n") + 1
-                text_y = y + top_header_height + (bottom_header_height - (line_count * (font_size + 1))) / 2 + font_size - 1
-                write(pdf, s_bottom, sub_x + 2, text_y, s_width - 4, {"size": font_size, "align": "center"})
+                _, _, s_bottom, _ = NAV_COLUMNS[sub_i]
+                s_width = VTVIK_COLUMN_WIDTHS[NAV_COLUMNS[sub_i][0]]
+                box(pdf, sub_x, bottom_box_top, s_width, bottom_header_height)
+                s_lines = s_bottom.replace(" ", "\n")
+                line_count = s_lines.count("\n") + 1
+                text_y = _header_text_y(bottom_box_top, bottom_header_height, line_count)
+                write(pdf, s_lines, sub_x + 2, text_y, s_width - 4, {"size": font_size, "align": "center"})
                 sub_x += s_width
 
             x += span_width
             idx = next_idx
         else:
+            # No top title, but the text still vertically centers within
+            # the bottom sub-row's slot, not the full two-row box height -
+            # it's grouped with the other bottom-row headers visually even
+            # though its own box spans the full header height.
             box(pdf, x, y, width, total_header_height)
-            line_count = value(bottom_title).count("\n") + 1
-            text_y = y + (total_header_height - (line_count * (font_size + 1))) / 2 + font_size - 1
-            write(pdf, bottom_title, x + 2, text_y, width - 4, {"size": font_size, "align": "center"})
+            bottom_lines = bottom_title.replace(" ", "\n")
+            line_count = bottom_lines.count("\n") + 1
+            text_y = _header_text_y(y + top_header_height, bottom_header_height, line_count)
+            align = "left" if key == "waypoint" else "center"
+            text_x, text_width = (x + 0.6, width) if align == "left" else (x, width)
+            write(pdf, bottom_lines, text_x, text_y, text_width, {"size": font_size, "align": align})
             x += width
             idx += 1
 
@@ -381,17 +579,16 @@ def _draw_table_rows(pdf, rows, start_y, maximum_y):
     if rows is None:
         rows = []
 
-    font_size = 7.5
+    font_size = 9.4
     line_height = font_size + 1
-    min_height = 26
+    min_height = 33.64
     vertical_padding = 4
-    scale = TABLE_WIDTH / 496.0
 
     for index, row in enumerate(rows):
         max_lines = 1
-        for key, _, _, base_width in NAV_COLUMNS:
+        for key, _, _, _ in NAV_COLUMNS:
             cell_text = combined_row_value(row, key)
-            max_lines = max(max_lines, _cell_line_count(cell_text, font_size, base_width * scale))
+            max_lines = max(max_lines, _cell_line_count(cell_text, font_size, VTVIK_COLUMN_WIDTHS[key]))
 
         content_height = max_lines * line_height + vertical_padding
         height = max(min_height, content_height)
@@ -400,21 +597,16 @@ def _draw_table_rows(pdf, rows, start_y, maximum_y):
             return {"y": y, "remaining": rows[index:]}
 
         x = TABLE_LEFT
-        for key, _, _, base_width in NAV_COLUMNS:
-            width = base_width * scale
+        for key, _, _, _ in NAV_COLUMNS:
+            width = VTVIK_COLUMN_WIDTHS[key]
             box(pdf, x, y, width, height)
             cell_text = combined_row_value(row, key)
             line_count = _cell_line_count(cell_text, font_size, width)
-            text_y = y + (height - (line_count * line_height)) / 2 + font_size
+            text_y = _header_text_y(y, height, line_count)
+            align = "left" if key == "waypoint" else "center"
+            text_x = x + 0.6 if align == "left" else x
 
-            write(
-                pdf,
-                cell_text,
-                x + 3,
-                text_y,
-                width - 6,
-                {"size": font_size, "align": "left" if key == "waypoint" else "center"},
-            )
+            write(pdf, cell_text, text_x, text_y, width, {"size": font_size, "align": align})
             x += width
 
         y += height
@@ -422,106 +614,145 @@ def _draw_table_rows(pdf, rows, start_y, maximum_y):
     return {"y": y, "remaining": []}
 
 
-def _draw_table_title(pdf, title_left, title_right, y):
-    banner_height = 24
+def _draw_table_title(pdf, title, y):
+    banner_height = 45.63
     box(pdf, TABLE_LEFT, y, TABLE_WIDTH, banner_height)
-    text_y = y + 15
-
-    write(pdf, title_left, TABLE_LEFT + 6, text_y, 180, {"size": 8.5, "lineBreak": False})
-    write(pdf, title_right, TABLE_LEFT + 190, text_y, 320, {"size": 8.5, "lineBreak": False})
+    write(pdf, title, TABLE_LEFT + 1, y + 26.16, TABLE_WIDTH - 4, {"size": 9.4, "lineBreak": False})
 
     return y + banner_height
 
 
-def draw_pages_two_and_three(pdf, data):
+TABLE_BOTTOM_LIMIT = 795
+
+
+def _start_table_page(pdf, data):
     title = data.get("page1", {}).get("header", {}).get("routeTitle", "")
     registration = data.get("page1", {}).get("header", {}).get("registration", "")
-
     pdf.showPage()
     route_header(pdf, title, registration)
-    box(pdf, TABLE_LEFT, 32, TABLE_WIDTH, 728)
+    box(pdf, 34.39, 34.39, 526.5, 771.61)
+    return _draw_table_header(pdf, 34.39)
 
-    y = _draw_table_header(pdf, 32)
-    main_result = _draw_table_rows(pdf, data.get("mainNavlog", []), y, 680)
-    y = main_result["y"]
 
+def draw_pages_two_and_three(pdf, data):
+    alternates = data.get("page1", {}).get("alternates", [])
     alternate_name = data.get("page1", {}).get("flightInfo", {}).get("alternate1", "")
-    alternate_route = data.get("routes", {}).get("alternate1Route", "")
-    clean_alt_route = value(alternate_route).replace("Route", "").strip()
+    routes = data.get("routes", {})
 
-    title_left = f"Alternate route for {alternate_name}"
-    title_right = f"Route {clean_alt_route}" if clean_alt_route else ""
+    # Content flows continuously across pages 2/3 - a page break happens
+    # only when a block or row genuinely doesn't fit, matching how the
+    # reference lets alternate2's table start right after alternate1's on
+    # the same page rather than always restarting fresh on page 3.
+    blocks = [(None, data.get("mainNavlog", []))]
 
-    y = _draw_table_title(pdf, title_left, title_right, y)
-    alternate_result = _draw_table_rows(pdf, data.get("alternate1Navlog", []), y, 744)
+    for position, (navlog_key, route_key) in enumerate([
+        ("alternate1Navlog", "alternate1Route"),
+        ("alternate2Navlog", "alternate2Route"),
+    ]):
+        rows = _drop_origin_row(data.get(navlog_key, []))
+        if not rows:
+            continue
 
-    pdf.showPage()
-    route_header(pdf, title, registration)
-    box(pdf, TABLE_LEFT, 32, TABLE_WIDTH, 728)
+        if position == 0:
+            name = alternate_name
+        else:
+            # flightInfo["alternate1"] is only ever "<main dest>,<alt1
+            # dest>" (there is no analogous pre-composed "alternate2"
+            # field) - reusing it for the SECOND alternate's own banner
+            # printed the first alternate's airport on both blocks
+            # ("VOTP,VOMM" twice instead of "VOTP,VOMM" then "VOTP,VOBG").
+            # Built the same way default1.py's equivalent banner is: the
+            # main destination plus this specific alternate's own airport.
+            main_dest = alternate_name.split(",")[0] if alternate_name else ""
+            alt_airport = value(alternates[1].get("airport")) if len(alternates) > 1 else ""
+            name = ",".join(part for part in [main_dest, alt_airport] if part)
 
-    y = _draw_table_header(pdf, 32)
+        route_text = value(routes.get(route_key)).replace("Route", "").strip()
+        title = f"Alternate route for {name}"
+        if route_text:
+            title += f"      Route {route_text}"
+        blocks.append((title, rows))
 
-    remaining_rows = main_result["remaining"] + alternate_result["remaining"]
-    alt2_rows = data.get("alternate2Navlog", [])
+    y = _start_table_page(pdf, data)
 
-    if remaining_rows:
-        continuation = _draw_table_rows(pdf, remaining_rows, y, 400)
-        y = continuation["y"]
+    for title, rows in blocks:
+        if title is not None:
+            if y + 45.63 + 33.64 > TABLE_BOTTOM_LIMIT:
+                y = _start_table_page(pdf, data)
+            y = _draw_table_title(pdf, title, y)
 
-    if alt2_rows:
-        alternate2_name = data.get("page1", {}).get("flightInfo", {}).get("alternate1", "")
-        alternate2_route = data.get("routes", {}).get("alternate2Route", "")
-        clean_alt2_route = value(alternate2_route).replace("Route", "").strip()
-        y = _draw_table_title(
-            pdf,
-            f"Alternate route for {alternate2_name}",
-            f"Route {clean_alt2_route}" if clean_alt2_route else "",
-            y,
-        )
-        continuation2 = _draw_table_rows(pdf, alt2_rows, y, 690)
-        y = continuation2["y"]
+        remaining = rows
+        while remaining:
+            result = _draw_table_rows(pdf, remaining, y, TABLE_BOTTOM_LIMIT)
+            y = result["y"]
+            remaining = result["remaining"]
+            if remaining:
+                y = _start_table_page(pdf, data)
 
-    y += 22
-    write(pdf, "AIRPORT INFO", TABLE_LEFT, y, 150, {"size": 8.5, "bold": False, "lineBreak": False})
+    airport_rows = data.get("airportInformation", [])
+    airport_needed = 22.6 + 11.23 + 22.38 * (len(airport_rows) + 1)
+    if airport_rows and y + airport_needed > TABLE_BOTTOM_LIMIT:
+        y = _start_table_page(pdf, data)
 
-    y += 20
+    y += 22.6
+    write(pdf, "AIRPORT INFO", TABLE_LEFT, y, 150, {"size": 9.4, "bold": False, "lineBreak": False})
 
-    scale = TABLE_WIDTH / 496.0
+    y += 11.23
+
+    # Runway designator and length are two separate columns under a single
+    # spanning "LONGEST RWY" header, not one combined cell.
     airport_columns = [
-        ("type", "", 40),
-        ("airport", "Airport", 45),
-        ("eta", "ETA", 50),
-        ("atis", "ATIS", 50),
-        ("tower", "TWR/CTAF", 72),
-        ("clearance", "CLR", 65),
-        ("ground", "GND", 48),
-        ("elevation", "ELEV", 46),
-        ("longestRunway", "LONGEST RWY", 80),
+        ("type", "", 47.98),
+        ("airport", "Airport", 55.27),
+        ("eta", "ETA", 49.42),
+        ("atis", "ATIS", 51.33),
+        ("tower", "TWR/CTAF", 89.94),
+        ("clearance", "CLR", 38.12),
+        ("ground", "GND", 42.50),
+        ("elevation", "ELEV", 48.50),
+        ("runwayDesignator", "LONGEST RWY", 49.19),
+        ("runwayLength", "LONGEST RWY", 54.28),
     ]
 
     x = TABLE_LEFT
-    for _, heading, base_width in airport_columns:
-        width = base_width * scale
-        box(pdf, x, y, width, 22)
-        write(pdf, heading, x + 2, y + 8, width - 4, {"size": 7.5, "align": "center"})
-        x += width
+    idx = 0
+    while idx < len(airport_columns):
+        key, heading, width = airport_columns[idx]
+        span_width = width
+        next_idx = idx + 1
+        while next_idx < len(airport_columns) and airport_columns[next_idx][1] == heading and heading:
+            span_width += airport_columns[next_idx][2]
+            next_idx += 1
 
-    y += 22
+        box(pdf, x, y, span_width, 22.38)
+        write(pdf, heading, x + 2, y + 14.53, span_width - 4, {"size": 9.4, "align": "center", "lineBreak": False})
+
+        if next_idx > idx + 1:
+            sub_x = x
+            for sub_i in range(idx, next_idx):
+                sub_width = airport_columns[sub_i][2]
+                box(pdf, sub_x, y, sub_width, 22.38)
+                sub_x += sub_width
+
+        x += span_width
+        idx = next_idx
+
+    y += 22.38
 
     for airport in data.get("airportInformation", []):
         x = TABLE_LEFT
-        for key, _, base_width in airport_columns:
-            width = base_width * scale
-            box(pdf, x, y, width, 22)
-            airport_value = airport.get(key)
-            if key == "longestRunway":
-                r_num = value(airport.get("longestRunway") or airport.get("runway"))
-                r_len = value(airport.get("runwayLength"))
-                airport_value = f"{r_num} {r_len}".strip()
+        for key, _, width in airport_columns:
+            box(pdf, x, y, width, 22.38)
+            if key == "runwayDesignator":
+                airport_value = value(airport.get("longestRunway") or airport.get("runway"))
+            elif key == "runwayLength":
+                airport_value = value(airport.get("runwayLength"))
+            else:
+                airport_value = airport.get(key)
 
-            write(pdf, airport_value, x + 2, y + 8, width - 4, {"size": 7.5, "align": "center"})
+            write(pdf, airport_value, x + 2, y + 14.54, width - 4, {"size": 9.4, "align": "center", "lineBreak": False})
             x += width
-        y += 22
+        y += 22.38
 
 
 # --------------------------------------------------
@@ -537,24 +768,24 @@ def draw_page_four(pdf, data):
     pdf.showPage()
 
     route_header(pdf, title, registration)
-    box(pdf, TABLE_LEFT, 26, TABLE_WIDTH, 734)
+    box(pdf, 34.39, 34.39, 526.5, 771.61)
 
     write(
         pdf,
         atc.get("title", f"ATC FLIGHT PLAN {field(atc, 'departure')} to {field(atc, 'destination')}"),
         TABLE_LEFT + 60,
-        48,
+        58.77,
         TABLE_WIDTH - 120,
-        {"size": 9, "align": "center", "lineBreak": False},
+        {"size": 9.4, "align": "center", "lineBreak": False},
     )
 
     write(
         pdf,
-        ". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .",
+        ". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .",
         TABLE_LEFT + 100,
-        60,
+        69.93,
         TABLE_WIDTH - 200,
-        {"size": 8, "align": "center", "lineBreak": False},
+        {"size": 9.4, "bold": True, "align": "center", "lineBreak": False},
     )
 
     flight_plan_text = find_value(
@@ -564,18 +795,18 @@ def draw_page_four(pdf, data):
         "icaoText", "icao_text", "fpl",
     )
     if flight_plan_text:
-        write(pdf, flight_plan_text, TABLE_LEFT + 10, 76, TABLE_WIDTH - 20, {"size": 8})
+        write(pdf, flight_plan_text, TABLE_LEFT + 10, 90.53, TABLE_WIDTH - 20, {"size": 8.2})
 
-    table_left = TABLE_LEFT + 10
+    table_left = TABLE_LEFT + 11.5
     table_width = TABLE_WIDTH - 20
 
     write(
         pdf,
         "ENROUTE WINDS",
         table_left,
-        180,
+        190.24,
         table_width,
-        {"size": 8.5, "align": "center", "lineBreak": False},
+        {"size": 9.4, "align": "center", "lineBreak": False},
     )
 
     enroute_data = data.get("enrouteWinds", {})
@@ -593,29 +824,34 @@ def draw_page_four(pdf, data):
 
     num_bands = max(len(bands), 1)
 
-    ident_col_width = 70
-    available_width = table_width - ident_col_width
-    pair_width = available_width / num_bands
-    wv_width = pair_width * 0.65
-    tmp_width = pair_width * 0.35
+    # A fixed per-band pitch (not derived from available page width) -
+    # the reference doesn't stretch to fill the frame for fewer bands,
+    # it just uses less of the page.
+    ident_col_width = 75.82
+    pair_width = 89.76
+    wv_width = 51.23
+    tmp_width = pair_width - wv_width
 
-    y = 205
-    row_height = 11.0
-
-    write(pdf, "IDENT", table_left, y, ident_col_width, {"size": 8, "lineBreak": False})
+    write(pdf, "IDENT", table_left, 218.25, ident_col_width, {"size": 9.4, "lineBreak": False})
 
     for b_idx, band in enumerate(bands):
         b_label = str(band).split("(")[0].strip()
         band_x = table_left + ident_col_width + (b_idx * pair_width)
+        band_step = b_idx * pair_width
+        # "FL xxx" and "W/V" don't share one centered block - each line
+        # has its own independent center (W/V, being shorter, centers a
+        # bit further right than the FL label above it), and neither
+        # aligns with the data rows' own band_x.
+        write(pdf, b_label, 111.23 + band_step, 212.72, wv_width, {"size": 9.4, "align": "center", "lineBreak": False})
+        write(pdf, "W/V", 118.13 + band_step, 223.88, wv_width, {"size": 9.4, "align": "center", "lineBreak": False})
+        write(pdf, "TMP", 159.11 + band_step, 218.25, tmp_width, {"size": 9.4, "align": "center", "lineBreak": False})
 
-        write(pdf, f"{b_label}\nW/V", band_x, y, wv_width, {"size": 7.5, "align": "center"})
-        write(pdf, "TMP", band_x + wv_width, y + 7, tmp_width, {"size": 7.5, "align": "center", "lineBreak": False})
-
-    y += 22
+    y = 238.01
+    row_height = 14.14
 
     for row in wind_rows:
         ident_str = value(row.get("identifier"))
-        write(pdf, ident_str, table_left, y, ident_col_width, {"size": 8, "lineBreak": False})
+        write(pdf, ident_str, table_left, y, ident_col_width, {"size": 9.4, "lineBreak": False})
 
         cells = row.get("values", [])
         for c_idx in range(min(len(cells), num_bands)):
@@ -629,21 +865,21 @@ def draw_page_four(pdf, data):
 
             raw_isa = value(cell.get("isa")).strip()
 
-            write(pdf, clean_wind, band_x, y, wv_width, {"size": 8, "align": "center", "lineBreak": False})
-            write(pdf, raw_isa, band_x + wv_width, y, tmp_width, {"size": 8, "align": "center", "lineBreak": False})
+            write(pdf, clean_wind, band_x - 2, y, wv_width, {"size": 9.4, "lineBreak": False})
+            write(pdf, raw_isa, band_x + wv_width - 2, y, tmp_width, {"size": 9.4, "lineBreak": False})
 
         y += row_height
 
     page_height = A4[1]
-    pdf.setFont("Courier-Bold", 8.5)
-    end_report_text = "**************     END OF THE REPORT    **************"
-    pdf.drawCentredString(TABLE_LEFT + TABLE_WIDTH / 2, page_height - 728, end_report_text)
+    pdf.setFont("Courier-Bold", 9.4)
+    end_report_text = "**************  END OF THE REPORT  **************"
+    pdf.drawCentredString(TABLE_LEFT + TABLE_WIDTH / 2, page_height - 773.30, end_report_text)
 
     computed_date = datetime.now().strftime("%d-%m-%Y")
     computed_time = datetime.now().strftime("%H:%M:%S")
 
-    write(pdf, f"COMPUTED DATE : {computed_date}", TABLE_LEFT, 756, 220, {"size": 8.5, "lineBreak": False, "padding": 0})
-    write(pdf, f"TIME : {computed_time} UTC", TABLE_LEFT + TABLE_WIDTH - 220, 756, 220, {"size": 8.5, "align": "right", "lineBreak": False, "padding": 0})
+    write(pdf, f"COMPUTED DATE : {computed_date}", 35.02, 802.65, 220, {"size": 9.4, "lineBreak": False, "padding": 0})
+    write(pdf, f"TIME : {computed_time} UTC", 471.63, 802.65, 220, {"size": 9.4, "align": "right", "lineBreak": False, "padding": 0})
 
 
 # --------------------------------------------------
