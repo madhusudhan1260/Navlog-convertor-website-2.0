@@ -829,10 +829,17 @@ def _drop_origin_row(rows):
 
 
 def _draw_banner(pdf, left_text, right_text, y, COLUMN_X):
+    # A banner spans the whole table, so its border should land on the
+    # frame's own edges - not COLUMN_X[0]/[-1], which are the navlog
+    # table's own column grid and can sit a hair inside the frame (or, for
+    # wide waypoint content, outside it - see TABLE_MIN_RIGHT above).
+    # Anchoring to COLUMN_X there left a short stray vertical stroke
+    # floating past the frame's right edge wherever a banner appeared,
+    # since no ordinary row ever draws that rightmost boundary itself.
     bottom = y + BANNER_HEIGHT
-    _hline(pdf, COLUMN_X[0], COLUMN_X[-1], bottom)
-    _vline(pdf, COLUMN_X[0], y, bottom)
-    _vline(pdf, COLUMN_X[-1], y, bottom)
+    _hline(pdf, FRAME_X0, FRAME_X1, bottom)
+    _vline(pdf, FRAME_X0, y, bottom)
+    _vline(pdf, FRAME_X1, y, bottom)
 
     banner = left_text
     if right_text:

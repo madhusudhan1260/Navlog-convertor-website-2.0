@@ -37,9 +37,18 @@ AIRCRAFT_FUEL_LIMITS = {
 # REQUIRED fuel), and TRACK printing the wind's own bearing (274 DEG,
 # matching WIND : 19KT HEAD (274°/021)) rather than the computed track.
 PLAN_TIME_TEMPLATES = (
-    "VTCSP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2", "VTKCM",
-    "DEFAULT", "DEFAULT1", "VTVIK",
+    "VTCSP", "VTAHP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2", "VTKCM",
+    "DEFAULT", "DEFAULT1", "VTVIK", "VTHYR",
 )
+
+# VTAHP prints the same sheet as VTCSP with one rule change: CONTINGENCY
+# fuel is floored at 60 lbs (the 5% figure only replaces it once it climbs
+# past 60) rather than VTCSP's unfloored 5% figure.
+VTAHP_CONTINGENCY_FUEL_MINIMUM = 60
+
+# VTCSP's own CONTINGENCY fuel is floored at 105 lbs the same way - the 5%
+# figure only replaces it once it climbs past 105.
+VTCSP_CONTINGENCY_FUEL_MINIMUM = 105
 
 # Contingency time on those templates is a tenth of trip time, but never
 # less than five minutes - see the contingency block below.
@@ -172,9 +181,99 @@ def minutes_to_hm_upper(total_minutes):
     return f"{total_minutes // 60}H{total_minutes % 60:02d}M"
 
 
-# Standard per-head weight allowances used by VTBBD's PAX / CC rows.
+# Standard per-head weight allowances behind every format's PAX / CC row.
 PAX_UNIT_WEIGHT = 165
+PAX_UNIT_WEIGHT_KG = 75
 CC_UNIT_WEIGHT = 187
+CC_UNIT_WEIGHT_KG = 85
+
+# Standard per-head weight allowances for the PAX breakdown form (adult /
+# child / infant / cabin crew), in both units an operator might enter
+# counts in. Cabin crew is entered alongside the other three but is NOT
+# part of the PAX figure - several formats carry cabin crew in their own
+# separate table (see page1.weight.cc below), so folding it into PAX would
+# double it up there. PAX prints as "<total count> - <total weight>" from
+# adult+child+infant only, e.g. 1 adult + 1 child + 1 infant in lbs ->
+# "3 - 264" (165 + 77 + 22); cabin crew's own count/weight goes to `cc`.
+PAX_CATEGORY_WEIGHTS = {
+    "lbs": {"adult": 165, "child": 77, "infant": 22, "cabinCrew": 187},
+    "kg": {"adult": 75, "child": 35, "infant": 10, "cabinCrew": 85},
+}
+
+# Every category's count can carry its own custom per-head weight override
+# (paxAdultWeight/paxChildWeight/paxInfantWeight/paxCabinCrewWeight) for
+# the rare passenger who doesn't match the standard allowance - entered in
+# whatever unit paxUnit is set to. Leaving it blank keeps the standard
+# PAX_CATEGORY_WEIGHTS figure above, which is the default either way.
+PAX_WEIGHT_OVERRIDE_KEYS = {
+    "adult": "paxAdultWeight",
+    "child": "paxChildWeight",
+    "infant": "paxInfantWeight",
+    "cabinCrew": "paxCabinCrewWeight",
+}
+
+
+def _pax_category_totals(user_input, categories):
+    """Sums the given PAX categories (a subset of adult/child/infant/
+    cabinCrew) into (total_count, total_weight, any_entered), honoring any
+    per-category custom weight override. Counts/overrides that don't parse
+    are skipped rather than raising."""
+    unit = str(user_input.get("paxUnit") or "lbs").strip().lower()
+    if unit not in PAX_CATEGORY_WEIGHTS:
+        unit = "lbs"
+    per_head = PAX_CATEGORY_WEIGHTS[unit]
+
+    total_count = 0
+    total_weight = 0
+    any_entered = False
+
+    for category in categories:
+        raw_count = str(user_input.get(f"pax{category[0].upper()}{category[1:]}Count") or "").strip()
+        if not raw_count:
+            continue
+        try:
+            count = int(float(raw_count))
+        except ValueError:
+            continue
+
+        weight_per_head = per_head[category]
+        raw_override = str(user_input.get(PAX_WEIGHT_OVERRIDE_KEYS[category]) or "").strip()
+        if raw_override:
+            try:
+                weight_per_head = float(raw_override)
+            except ValueError:
+                pass
+
+        any_entered = True
+        total_count += count
+        total_weight += count * weight_per_head
+
+    return total_count, total_weight, any_entered
+
+
+def _pax_breakdown_total(user_input):
+    """Sums the adult/child/infant PAX counts (cabin crew excluded - see
+    PAX_CATEGORY_WEIGHTS above) into a single "<count> - <weight>" figure.
+    Returns None (fall through to the plain paxWeight field) when none of
+    the three counts were actually entered."""
+    total_count, total_weight, any_entered = _pax_category_totals(
+        user_input, ("adult", "child", "infant")
+    )
+    if not any_entered:
+        return None
+    return f"{total_count} - {round(total_weight)}"
+
+
+def _pax_cabin_crew_total(user_input):
+    """Cabin crew's own "<count> - <weight>" figure from the same
+    breakdown form, for the separate CC table some formats carry (see
+    page1.weight.cc). Returns None when no cabin crew count was entered."""
+    total_count, total_weight, any_entered = _pax_category_totals(
+        user_input, ("cabinCrew",)
+    )
+    if not any_entered:
+        return None
+    return f"{total_count} - {round(total_weight)}"
 
 # VTBBD's own page-3 footnote spells its trip fuel out as
 # "A TO B + APCH & LDG AT B". The approach-and-landing allowance is a
@@ -212,12 +311,12 @@ def last_numeric(rows, key):
     return None
 
 
-def expand_head_count(value_in, unit_weight):
-    """VTBBD prints PAX / CC as "<count> - <total weight>": one passenger
-    at 165 lbs shows as "1 - 165", two as "2 - 330". Given a plain head
-    count this expands it. Anything that already contains a dash, or that
-    isn't a whole number, is passed straight through so an operator can
-    still type the pair by hand."""
+def expand_head_count(value_in, weight_lbs, weight_kg=None, unit="lbs"):
+    """PAX / CC print as "<count> - <total weight>": one passenger at 165
+    lbs shows as "1 - 165", two as "2 - 330". Given a plain head count
+    this expands it, in whichever of lbs/kg the operator picked. Anything
+    that already contains a dash, or that isn't a whole number, is passed
+    straight through so an operator can still type the pair by hand."""
     raw = str(value_in or "").strip()
     if not raw or "-" in raw:
         return raw
@@ -227,7 +326,10 @@ def expand_head_count(value_in, unit_weight):
     except ValueError:
         return raw
 
-    return f"{count} - {count * unit_weight}"
+    unit = str(unit or "lbs").strip().lower()
+    per_head = weight_kg if (unit == "kg" and weight_kg is not None) else weight_lbs
+
+    return f"{count} - {round(count * per_head)}"
 
 
 def parse_fuel_flow_per_hour(text):
@@ -750,6 +852,12 @@ def convert_with_claude(master_json, template="MLOVE"):
         if _five_pct_fuel is not None:
             _computed_contingency_fuel, _computed_contingency_time = _five_pct_fuel, _five_pct_time
 
+        if template == "VTAHP" and _computed_contingency_fuel is not None:
+            _computed_contingency_fuel = max(_computed_contingency_fuel, VTAHP_CONTINGENCY_FUEL_MINIMUM)
+
+        if template == "VTCSP" and _computed_contingency_fuel is not None:
+            _computed_contingency_fuel = max(_computed_contingency_fuel, VTCSP_CONTINGENCY_FUEL_MINIMUM)
+
         # On these templates the contingency TIME does not track the 5%
         # fuel figure - it is 10% of trip time, floored at five minutes.
         # The operator's reference documents agree:
@@ -1142,25 +1250,39 @@ def convert_with_claude(master_json, template="MLOVE"):
         fw.get("payload")
     )
 
+    # TEST is a testing-only format for the adult/child/infant/cabin-crew
+    # PAX breakdown (PAX_CATEGORY_WEIGHTS above) - every real format prints
+    # a plain PAX/CC figure instead, exactly as before that breakdown form
+    # existed.
+    _pax_value = None
+    _cc_value = None
+    if template == "TEST":
+        _pax_value = _pax_breakdown_total(user_input)
+        _cc_value = _pax_cabin_crew_total(user_input)
+
+    # PAX / CC print as "<count> - <weight>" on every format now, in
+    # whichever of lbs/kg the operator picked (paxUnit) - not just VTBBD.
+    _pax_cc_unit = str(user_input.get("paxUnit") or "lbs").strip().lower()
+
     # FIX #4: PAX Fallback added
-    _pax_value = first(
-        user_input.get("paxWeight"),
-        summary.get("soulsOnBoard"),
-        summary.get("pax")
-    )
+    if _pax_value is None:
+        _pax_value = first(
+            user_input.get("paxWeight"),
+            summary.get("soulsOnBoard"),
+            summary.get("pax")
+        )
+        _pax_value = expand_head_count(
+            _pax_value, PAX_UNIT_WEIGHT, PAX_UNIT_WEIGHT_KG, _pax_cc_unit
+        )
 
-    # VTBBD-only: cabin crew count/weight row, between PAX and LOAD.
-    _cc_value = first(
-        user_input.get("ccWeight"),
-        user_input.get("cabinCrewCount")
-    )
-
-    # VTBBD prints these two rows as "<count> - <total weight>" using the
-    # standard per-head allowances. MLOVE/VTVIK print a plain head count,
-    # so the expansion is scoped to VTBBD only.
-    if template == "VTBBD":
-        _pax_value = expand_head_count(_pax_value, PAX_UNIT_WEIGHT)
-        _cc_value = expand_head_count(_cc_value, CC_UNIT_WEIGHT)
+    if _cc_value is None:
+        _cc_value = first(
+            user_input.get("ccWeight"),
+            user_input.get("cabinCrewCount")
+        )
+        _cc_value = expand_head_count(
+            _cc_value, CC_UNIT_WEIGHT, CC_UNIT_WEIGHT_KG, _pax_cc_unit
+        )
 
     page1["weight"]["pax"] = _pax_value
     page1["weight"]["cc"] = _cc_value

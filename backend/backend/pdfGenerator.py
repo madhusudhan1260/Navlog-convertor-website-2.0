@@ -571,12 +571,13 @@ def draw_page_four(pdf, data):
 # --------------------------------------------------
 
 
-def generate_mlove_pdf(navlog):
+def generate_mlove_pdf(navlog, file_prefix="MLOVE"):
     """Generate the MLOVE-formatted flight-plan PDF and return its
-    relative path under OUTPUT_DIRECTORY."""
+    relative path under OUTPUT_DIRECTORY. TEST (the PAX-breakdown testing
+    format) reuses this same sheet - only the prefix names the file."""
     os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
-    file_name = f"MLOVE{int(datetime.now().timestamp() * 1000)}.pdf"
+    file_name = f"{file_prefix}{int(datetime.now().timestamp() * 1000)}.pdf"
     absolute_path = os.path.join(OUTPUT_DIRECTORY, file_name)
     relative_path = os.path.join("generated", file_name)
 
@@ -621,9 +622,12 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
         from vtvik import generate_vtvik_pdf
         return generate_vtvik_pdf(navlog)
 
-    if prefix == "VTCSP":
+    # VTAHP is the same sheet as VTCSP - the only difference is a data-
+    # level rule (contingency fuel floored at 60 lbs), handled entirely in
+    # claude.py's PLAN_TIME_TEMPLATES derivation, not in the renderer.
+    if prefix in ("VTCSP", "VTAHP"):
         from vtcsp import generate_vtcsp_pdf
-        return generate_vtcsp_pdf(navlog)
+        return generate_vtcsp_pdf(navlog, file_prefix=prefix)
 
     # INDO PACIFIC's "1 ALT" and "2 ALT" documents share one layout, so
     # both formats render from the same module - the number in the name
@@ -631,6 +635,10 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
     if prefix in ("VTKCM", "VTKCM2"):
         from vtkcm import generate_vtkcm_pdf
         return generate_vtkcm_pdf(navlog)
+
+    if prefix == "VTHYR":
+        from vthyr import generate_vthyr_pdf
+        return generate_vthyr_pdf(navlog)
 
     if prefix == "VTJOE":
         from vtjoe import generate_vtjoe_pdf
@@ -642,5 +650,11 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
             navlog,
             alternates=2 if prefix == "INDOPACIFIC2" else 1,
         )
+
+    # TEST: not a real operator sheet - it exists only to exercise the
+    # adult/child/infant/cabin-crew PAX breakdown, so it reuses MLOVE's
+    # own layout rather than needing one of its own.
+    if prefix == "TEST":
+        return generate_mlove_pdf(navlog, file_prefix="TEST")
 
     return generate_mlove_pdf(navlog)
