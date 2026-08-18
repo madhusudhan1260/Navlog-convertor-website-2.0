@@ -297,12 +297,13 @@ def draw_page_one(pdf, data):
     _text(pdf, 492.3, 114.2, weight.get("pax"))
 
     # ---- MAIN ROUTE / crew ----
+    # Unlike VTVIK/default1, VTKCM's own reference does not repeat the
+    # cruise-speed tail here - just the flight level and the route itself.
     main_route = " ".join(
         part
         for part in [
             value(flight.get("flightLevel")),
-            "-" if _cruise_tail(misc.get("plannedProfile")) else "",
-            _cruise_tail(misc.get("plannedProfile")),
+            "-",
             value(data.get("routes", {}).get("mainRoute")),
         ]
         if part
@@ -343,7 +344,7 @@ def draw_page_one(pdf, data):
         51.0,
         226.4,
         "- - - - - - - - PLAN TIME & FUEL - - - - - - - - - - - - - - - - - - - - - - "
-        "- - - - - - PLAN WT (in LBS) - - - - - - - - - - - - -",
+        "- - - - - - ACTUAL WT (in LBS) - - - - - - - - - - - - -",
     )
 
     alt1 = alternates[0] if len(alternates) > 0 else {}
@@ -497,7 +498,7 @@ def draw_page_one(pdf, data):
         _text_center(pdf, 297.6, cert_y, cert_line, size=SIZE_CERT)
         cert_y += 10.7
 
-    _text(pdf, 416.6, 742.8, "(PILOT/COPILOT SIGNATURE)")
+    _text(pdf, 416.6, 742.8, "(PILOT SIGNATURE)")
 
 
 # --------------------------------------------------
@@ -607,10 +608,15 @@ def _draw_row(pdf, row, y):
 
 
 def _draw_banner(pdf, left_text, right_text, y):
+    # A banner spans the whole table, so its border belongs on the frame's
+    # own edges, not COLUMN_X[0]/[-1] - those are the navlog table's own
+    # column grid and can sit off the frame by a point or so, which showed
+    # up as a short stray vertical stroke since no ordinary row draws that
+    # rightmost boundary itself.
     bottom = y + BANNER_HEIGHT
-    _hline(pdf, COLUMN_X[0], COLUMN_X[-1], bottom)
-    _vline(pdf, COLUMN_X[0], y, bottom)
-    _vline(pdf, COLUMN_X[-1], y, bottom)
+    _hline(pdf, FRAME_X0, FRAME_X1, bottom)
+    _vline(pdf, FRAME_X0, y, bottom)
+    _vline(pdf, FRAME_X1, y, bottom)
 
     _text(pdf, COLUMN_X[0] + 2.6, y + 26.1, left_text)
     _text(pdf, 179.9, y + 26.1, right_text)

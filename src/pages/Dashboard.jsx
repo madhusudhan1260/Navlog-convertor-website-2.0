@@ -5,6 +5,14 @@ import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Ic
 import { API_URL } from "../api";
 import { authHeader, signOut } from "../auth";
 
+// Mirrors claude.py's PAX_CATEGORY_WEIGHTS - shown here only as a live
+// preview before the operator submits; the backend is the source of truth
+// for the figure that actually prints.
+const PAX_CATEGORY_WEIGHTS = {
+  lbs: { adult: 165, child: 77, infant: 22, cabinCrew: 187 },
+  kg: { adult: 75, child: 35, infant: 10, cabinCrew: 85 },
+};
+
 const FORMATS = [
   {
     id: "MLOVE",
@@ -67,6 +75,17 @@ const FORMATS = [
     ],
   },
   {
+    id: "VTAHP",
+    key: "AH",
+    note: "Letter · plan time & weight",
+    tips: [
+      "Same sheet as VTCSP, with one change: Contingency fuel is floored at 60 lbs",
+      "5% of trip fuel prints as-is once it climbs past 60 lbs",
+      "Taxi prints a flat 0:10; Min Trip Fuel = REQUIRED fuel",
+      "Endurance fills the ENDURANCE and XTRA times — leave it blank and both print empty",
+    ],
+  },
+  {
     id: "INDOPACIFIC1",
     label: "INDO PACIFIC 1",
     key: "I1",
@@ -110,6 +129,28 @@ const FORMATS = [
       "Additional Fuel / Time are operator-entered; Discretionary is what's left of the extra",
       "AIRPORT INFO lists the alternates as ALTN1 / ALTN2 rows",
       "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+    ],
+  },
+  {
+    id: "VTHYR",
+    key: "HY",
+    note: "A4 · helicopter, KG, coordinates",
+    tips: [
+      "DEP/DEST are lat/long coordinates, not ICAO codes - no city name follows the dash",
+      "Every weight prints in KG, not LBS",
+      "Contingency: 5% of trip fuel, 10% of trip time (5 min minimum)",
+      "Taxi prints a flat 0:10; Min Trip Fuel = REQUIRED fuel",
+      "Five V-speeds: V1 / VR / V2 / VFTO / VREF",
+    ],
+  },
+  {
+    id: "TEST",
+    key: "TS",
+    note: "A4 · testing only",
+    tips: [
+      "Not a real operator sheet - prints the same layout as MLOVE",
+      "The only format with the adult/child/infant/cabin-crew PAX breakdown",
+      "Every other format keeps a plain PAX + Cabin Crew Count field",
     ],
   },
 ];
@@ -201,14 +242,15 @@ const FIELD_USAGE = {
   pilotName: ALL_FORMATS,
   coPilotName: ALL_FORMATS,
   cabinCrewName: ["VTBBD"],
-  ccWeight: ["VTBBD"],
+  // TEST already has its own cabin-crew count inside the breakdown form.
+  ccWeight: except("TEST"),
 
   departure: ALL_FORMATS,
   destination: ALL_FORMATS,
   flightLevel: ALL_FORMATS,
 
   paxWeight: ALL_FORMATS,
-  maxTripFuel: ["DEFAULT", "DEFAULT1", "VTVIK", "VTCSP", "INDOPACIFIC1",
+  maxTripFuel: ["DEFAULT", "DEFAULT1", "VTVIK", "VTCSP", "VTAHP", "INDOPACIFIC1",
                 "INDOPACIFIC2", "VTKCM"],
   endurance: ALL_FORMATS,
   contingencyFuel: ALL_FORMATS,
@@ -243,7 +285,7 @@ const FORM_SECTIONS = [
         cols: 2,
         fields: [
           { name: "cabinCrewName", label: "Cabin Crew Name", placeholder: "MS SHWETA DIWAN" },
-          { name: "ccWeight", label: "Cabin Crew Count", placeholder: "1  →  prints 1 - 187" },
+          { name: "ccWeight", label: "Cabin Crew Count", withUnit: true, placeholder: "1" },
         ],
       },
     ],
@@ -271,9 +313,20 @@ const FORM_SECTIONS = [
     hint: "Not carried by ForeFlight — enter per flight",
     rows: [
       {
-        cols: 3,
+        cols: 1,
         fields: [
-          { name: "paxWeight", label: "PAX", placeholder: "1  →  prints 1 - 165 on VTBBD" },
+          {
+            name: "paxWeight",
+            label: "PAX",
+            paxBreakdown: true,
+            withUnit: true,
+            placeholder: "3",
+          },
+        ],
+      },
+      {
+        cols: 2,
+        fields: [
           { name: "maxTripFuel", label: "Max Trip Fuel", placeholder: "3329" },
           { name: "endurance", label: "Endurance", placeholder: "4:15" },
         ],
@@ -385,6 +438,15 @@ function Dashboard() {
     flightLevel: "",
 
     paxWeight: "",
+    paxAdultCount: "",
+    paxChildCount: "",
+    paxInfantCount: "",
+    paxCabinCrewCount: "",
+    paxUnit: "lbs",
+    paxAdultWeight: "",
+    paxChildWeight: "",
+    paxInfantWeight: "",
+    paxCabinCrewWeight: "",
     ccWeight: "",
     maxTripFuel: "",
     contingencyFuel: "",
@@ -406,6 +468,10 @@ function Dashboard() {
   });
 
   const [loading, setLoading] = useState(false);
+
+  // Custom per-head PAX weights are rare - the override inputs stay
+  // tucked behind this toggle rather than cluttering the common case.
+  const [showPaxWeightOverrides, setShowPaxWeightOverrides] = useState(false);
 
   // The dashboard is a two-step flow: pick the output format, then fill in
   // the details that format actually prints. Which step you are on is the
@@ -551,6 +617,24 @@ function Dashboard() {
           flightLevel: form.flightLevel,
 
           paxWeight: form.paxWeight,
+
+          paxAdultCount: form.paxAdultCount,
+
+          paxChildCount: form.paxChildCount,
+
+          paxInfantCount: form.paxInfantCount,
+
+          paxCabinCrewCount: form.paxCabinCrewCount,
+
+          paxUnit: form.paxUnit,
+
+          paxAdultWeight: form.paxAdultWeight,
+
+          paxChildWeight: form.paxChildWeight,
+
+          paxInfantWeight: form.paxInfantWeight,
+
+          paxCabinCrewWeight: form.paxCabinCrewWeight,
 
           ccWeight: form.ccWeight,
 
@@ -744,6 +828,16 @@ function Dashboard() {
   }
 
   function renderField(field) {
+    // The adult/child/infant/cabin-crew breakdown is TEST-only - every
+    // other format keeps the plain PAX/CC count field it always had.
+    if (field.paxBreakdown && form.selectedFormat === "TEST") {
+      return renderPaxBreakdown(field);
+    }
+
+    if (field.withUnit) {
+      return renderCountWithUnit(field);
+    }
+
     return (
       <div className="field" key={field.name}>
         <label>
@@ -756,6 +850,146 @@ function Dashboard() {
           value={form[field.name]}
           onChange={update}
         />
+      </div>
+    );
+  }
+
+  // PAX and Cabin Crew Count both share one lbs/kg toggle (paxUnit) - a
+  // typed count expands to "<count> - <weight>" against the standard
+  // per-head allowance in whichever unit is selected, on every format.
+  function renderCountWithUnit(field) {
+    return (
+      <div className="field pax-count-unit" key={field.name}>
+        <label>{field.label}</label>
+        <div className="pax-count-unit-row">
+          <input
+            name={field.name}
+            placeholder={field.placeholder}
+            value={form[field.name]}
+            onChange={update}
+          />
+          <select name="paxUnit" value={form.paxUnit} onChange={update}>
+            <option value="lbs">lbs</option>
+            <option value="kg">kg</option>
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  // PAX is entered as adult/child/infant/cabin-crew head counts rather
+  // than a single number. Cabin crew is entered here alongside the other
+  // three but is kept OUT of the PAX total on purpose - several formats
+  // already carry cabin crew in their own separate table, so it prints
+  // its own "<count> - <weight>" figure there instead of doubling up
+  // inside PAX. Adult+child+infant in lbs -> e.g. "3 - 264" (165+77+22).
+  const PAX_CATEGORIES = [
+    { key: "paxAdultCount", weightKey: "adult", label: "Adult" },
+    { key: "paxChildCount", weightKey: "child", label: "Child" },
+    { key: "paxInfantCount", weightKey: "infant", label: "Infant" },
+    { key: "paxCabinCrewCount", weightKey: "cabinCrew", label: "Cabin Crew" },
+  ];
+
+  const PAX_WEIGHT_OVERRIDE_KEYS = {
+    adult: "paxAdultWeight",
+    child: "paxChildWeight",
+    infant: "paxInfantWeight",
+    cabinCrew: "paxCabinCrewWeight",
+  };
+
+  function renderPaxBreakdown(field) {
+    const perHead = PAX_CATEGORY_WEIGHTS[form.paxUnit] || PAX_CATEGORY_WEIGHTS.lbs;
+
+    const weightFor = (weightKey) => {
+      const override = parseFloat(form[PAX_WEIGHT_OVERRIDE_KEYS[weightKey]]);
+      return Number.isFinite(override) ? override : perHead[weightKey];
+    };
+
+    let paxCount = 0;
+    let paxWeight = 0;
+    let paxEntered = false;
+    let ccCount = 0;
+    let ccWeight = 0;
+    let ccEntered = false;
+
+    for (const { key, weightKey } of PAX_CATEGORIES) {
+      const count = parseInt(form[key], 10);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      const weight = count * weightFor(weightKey);
+
+      if (weightKey === "cabinCrew") {
+        ccEntered = true;
+        ccCount += count;
+        ccWeight += weight;
+      } else {
+        paxEntered = true;
+        paxCount += count;
+        paxWeight += weight;
+      }
+    }
+
+    return (
+      <div className="field pax-breakdown" key={field.name}>
+        <label>{field.label}</label>
+
+        <div className="pax-breakdown-row">
+          {PAX_CATEGORIES.map(({ key, label }) => (
+            <div className="pax-count" key={key}>
+              <span className="pax-count-label">{label}</span>
+              <input
+                name={key}
+                type="number"
+                min="0"
+                inputMode="numeric"
+                placeholder="0"
+                value={form[key]}
+                onChange={update}
+              />
+            </div>
+          ))}
+
+          <div className="pax-unit">
+            <span className="pax-count-label">Unit</span>
+            <select name="paxUnit" value={form.paxUnit} onChange={update}>
+              <option value="lbs">lbs</option>
+              <option value="kg">kg</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="pax-custom-toggle"
+          onClick={() => setShowPaxWeightOverrides((v) => !v)}
+        >
+          {showPaxWeightOverrides ? "− Hide custom per-head weight" : "+ Custom per-head weight"}
+        </button>
+
+        {showPaxWeightOverrides && (
+          <div className="pax-breakdown-row pax-breakdown-overrides">
+            {PAX_CATEGORIES.map(({ weightKey, label }) => (
+              <div className="pax-count" key={weightKey}>
+                <span className="pax-count-label">{label} ({form.paxUnit})</span>
+                <input
+                  name={PAX_WEIGHT_OVERRIDE_KEYS[weightKey]}
+                  type="number"
+                  min="0"
+                  inputMode="decimal"
+                  placeholder={String(perHead[weightKey])}
+                  value={form[PAX_WEIGHT_OVERRIDE_KEYS[weightKey]]}
+                  onChange={update}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="pax-breakdown-preview">
+          {paxEntered
+            ? `PAX prints as "${paxCount} - ${Math.round(paxWeight)}"`
+            : "Leave blank to use ForeFlight's own souls-on-board figure"}
+          {ccEntered ? ` · Cabin crew: "${ccCount} - ${Math.round(ccWeight)}"` : null}
+        </div>
       </div>
     );
   }

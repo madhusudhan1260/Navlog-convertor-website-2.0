@@ -680,10 +680,15 @@ def _draw_row(pdf, row, y):
 
 
 def _draw_banner(pdf, left_text, right_text, y):
+    # A banner spans the whole table, so its border belongs on the frame's
+    # own edges, not COLUMN_X[0]/[-1] - those are the navlog table's own
+    # column grid and sit off the frame (COLUMN_X[-1]=556.3 vs
+    # FRAME_X1=553.8), which showed up as a short stray vertical stroke
+    # since no ordinary row draws that rightmost boundary itself.
     bottom = y + BANNER_HEIGHT
-    _hline(pdf, COLUMN_X[0], COLUMN_X[-1], bottom)
-    _vline(pdf, COLUMN_X[0], y, bottom)
-    _vline(pdf, COLUMN_X[-1], y, bottom)
+    _hline(pdf, FRAME_X0, FRAME_X1, bottom)
+    _vline(pdf, FRAME_X0, y, bottom)
+    _vline(pdf, FRAME_X1, y, bottom)
 
     _text(pdf, COLUMN_X[0] + 2.7, y + 26.7, left_text)
     _text(pdf, 196.7, y + 26.7, right_text)
@@ -961,10 +966,12 @@ def _draw_report_footer(pdf):
 # --------------------------------------------------
 
 
-def generate_vtcsp_pdf(navlog):
+def generate_vtcsp_pdf(navlog, file_prefix="VTCSP"):
+    """VTAHP is the same sheet as VTCSP - see the dispatcher note in
+    pdfGenerator.py - so the prefix only names the file."""
     os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
-    file_name = f"VTCSP{int(datetime.now().timestamp() * 1000)}.pdf"
+    file_name = f"{file_prefix}{int(datetime.now().timestamp() * 1000)}.pdf"
     absolute_path = os.path.join(OUTPUT_DIRECTORY, file_name)
     relative_path = os.path.join("generated", file_name)
 
