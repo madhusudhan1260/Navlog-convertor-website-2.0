@@ -483,7 +483,10 @@ def draw_page_one(pdf, data):
     level_y = 403.3
     for row in level_calcs[:5]:
         fl_disp = _space_fl(row.get("fl"))
-        if fl_disp and not fl_disp.upper().startswith("FL"):
+        # Below the transition altitude a level-calc row is a raw altitude
+        # ("3000 ft"), not a flight level - only bare numbers get an "FL "
+        # prefix added, not values that already carry their own unit.
+        if fl_disp and not fl_disp.upper().startswith("FL") and "ft" not in fl_disp.lower():
             fl_disp = f"FL {fl_disp}"
 
         # The reference prints ForeFlight's delta as published, "(0:00)"

@@ -267,6 +267,7 @@ def draw_page_one(pdf, data):
         ("TRIP", fuel.get("trip"),
          find_value(fuel, "tripTime", "trip_time"),
          _nm(find_value(fuel, "tripDistance", "trip_distance"))),
+        ("MAX TRIP FUEL", fuel.get("maxTripFuel"), "", ""),
         ("CONTINGENCY", fuel.get("contingency"),
          find_value(fuel, "contingencyTime", "contingency_time"), ""),
         ("ALT1", fuel.get("alternate"),
@@ -316,7 +317,7 @@ def draw_page_one(pdf, data):
     _text(
         pdf,
         51.0,
-        405.8,
+        419.95,
         "- - - - - - - - - - - - - - - - - MISC - - - - - - - - - - - - - - - - -",
     )
 
@@ -334,7 +335,7 @@ def draw_page_one(pdf, data):
         ("TAS", find_value(time_info, "tas")),
     ]
 
-    misc_y = 424.4
+    misc_y = 438.55
     for label, val in misc_rows:
         _text(pdf, 50.5, misc_y, label)
         _text(pdf, 237.4, misc_y, ":")
@@ -342,25 +343,25 @@ def draw_page_one(pdf, data):
         misc_y += ROW_STEP
 
     # ---- routes and clearances ----
-    _rule(pdf, 495.9)
+    _rule(pdf, 510.05)
 
     atc_route = value(misc.get("atcRoute")).upper()
-    _text(pdf, 48.3, 511.6, f"ATC ROUTE   :   {atc_route}".rstrip())
+    _text(pdf, 48.3, 525.75, f"ATC ROUTE   :   {atc_route}".rstrip())
 
-    _rule(pdf, 524.3)
+    _rule(pdf, 538.45)
 
-    _text(pdf, 48.3, 540.0, "DEP CLEARANCE")
-    _text(pdf, 136.9, 540.0, ":")
-    _text(pdf, 148.0, 540.0, operational.get("departureClearance"))
+    _text(pdf, 48.3, 554.15, "DEP CLEARANCE")
+    _text(pdf, 136.9, 554.15, ":")
+    _text(pdf, 148.0, 554.15, operational.get("departureClearance"))
 
-    _text(pdf, 48.3, 610.5, "TAXI CLEARANCE")
-    _text(pdf, 136.9, 610.5, ":")
-    _text(pdf, 148.0, 610.5, operational.get("depTaxiClearance"))
+    _text(pdf, 48.3, 624.65, "TAXI CLEARANCE")
+    _text(pdf, 136.9, 624.65, ":")
+    _text(pdf, 148.0, 624.65, operational.get("depTaxiClearance"))
 
-    _rule(pdf, 679.6)
+    _rule(pdf, 693.75)
 
     # ---- alternate summaries ----
-    for index, y in ((0, 695.2), (1, 749.0)):
+    for index, y in ((0, 709.35), (1, 763.15)):
         alternate = alternates[index] if len(alternates) > index else {}
 
         _text(pdf, 48.3, y, f"ALT{index + 1}")

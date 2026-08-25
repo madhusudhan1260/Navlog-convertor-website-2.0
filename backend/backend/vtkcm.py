@@ -171,13 +171,6 @@ def _space_fl(s):
     return re.sub(r"\bFL(\d)", r"FL \1", value(s))
 
 
-def _degrees(v):
-    v = value(v)
-    if not v:
-        return ""
-    return v if v.upper().endswith("DEG") else f"{v} DEG"
-
-
 def _rank(name):
     name = value(name).upper()
     if not name:
@@ -259,7 +252,7 @@ def draw_page_one(pdf, data):
     banner = re.sub(r"\s+", " ", banner).replace("() ", "").replace("(ETA ) ", "")
     _text_center(pdf, BANNER_CENTER_X, 69.9, banner)
 
-    # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
+    # ---- DEP / DEST + DIST / CRUISE / PAX ----
     dep_code, dep_name = _airport_display(flight.get("departure"), main_navlog)
     dest_code, dest_name = _airport_display(
         flight.get("destination"), main_navlog, from_end=True
@@ -287,10 +280,6 @@ def draw_page_one(pdf, data):
     for cruise_line in cruise_lines[:4]:
         _text(pdf, 308.0, cruise_y, cruise_line, size=SIZE_CRUISE)
         cruise_y += 8.9
-
-    _text(pdf, 451.9, 100.1, "TRACK")
-    _text(pdf, 486.7, 100.1, ":")
-    _text(pdf, 492.3, 100.1, _degrees(time_info.get("track")))
 
     _text(pdf, 451.9, 114.2, "PAX")
     _text(pdf, 486.7, 114.2, ":")
@@ -333,10 +322,6 @@ def draw_page_one(pdf, data):
             _text(pdf, 301.4, y, right_label)
             _text(pdf, 374.7, y, ":")
             _text_right(pdf, 473.5, y, right_val)
-
-    _text(pdf, 301.4, 207.7, "WIND")
-    _text(pdf, 374.7, 207.7, ":")
-    _text(pdf, 385.0, 207.7, value(time_info.get("averageWinds")).upper())
 
     # ---- PLAN TIME & FUEL / PLAN WT ----
     _text(
@@ -429,7 +414,10 @@ def draw_page_one(pdf, data):
     level_y = 409.5
     for row in level_calcs[:5]:
         fl_disp = _space_fl(row.get("fl"))
-        if fl_disp and not fl_disp.upper().startswith("FL"):
+        # Below the transition altitude a level-calc row is a raw altitude
+        # ("3000 ft"), not a flight level - only bare numbers get an "FL "
+        # prefix added, not values that already carry their own unit.
+        if fl_disp and not fl_disp.upper().startswith("FL") and "ft" not in fl_disp.lower():
             fl_disp = f"FL {fl_disp}"
 
         _text(pdf, 56.8, level_y, fl_disp)
@@ -504,35 +492,41 @@ def draw_page_one(pdf, data):
 # --------------------------------------------------
 # NAVLOG TABLE (PAGES 2+)
 # --------------------------------------------------
-# 18 flat columns. The TIME group heads only the LEG column; the column
-# beside it, headed "ETE", carries the remaining-time figure.
+# 15 flat columns (ETA/ATA, ACTUAL FUEL, and AIRWAY dropped - none ever
+# carried a value on this format's own reference, per operator request).
+# The TIME group heads only the LEG column; the column beside it, headed
+# "ETE", carries the remaining-time figure. Widths are the original
+# 18-column set with those columns' width folded back in proportionally,
+# so the table still fills the same frame it always has.
 
 COLUMN_X = [
-    34.8, 116.5, 157.6, 181.1, 202.2, 230.7, 253.8, 292.3, 311.2, 332.3,
-    350.3, 371.8, 395.4, 422.9, 446.7, 472.8, 493.6, 517.8, 560.5,
+    34.8, 137.6, 167.2, 193.7, 229.7, 258.7, 307.1, 330.9, 357.5, 380.1,
+    407.2, 436.9, 471.5, 501.5, 534.4, 560.5,
 ]
 
 COLUMN_KEYS = [
-    "waypoint", "airway", "heading", "course", "flightLevel", "windComponent",
+    "waypoint", "heading", "course", "flightLevel", "windComponent",
     "windDirectionSpeed", "isa", "tas", "gs", "legDistance", "remainingDistance",
-    "fuelUsed", "fuelRemaining", "legTime", "remainingTime", "ata", "actualFuel",
+    "fuelUsed", "fuelRemaining", "legTime", "remainingTime",
 ]
 
 COLUMN_LABELS = [
-    "WAYPOINT", "AIRWAY", "HDG", "CRS", "ALT", "CMP", "DIR/SPD", "ISA", "TAS",
+    "WAYPOINT", "HDG", "CRS", "ALT", "CMP", "DIR/SPD", "ISA", "TAS",
     "GS", "LEG", "REM", "USED", "REM", "LEG", "ETE",
 ]
 
 # (label, first column index, last column index) for the shallow top row.
 COLUMN_GROUPS = [
-    ("WIND", 5, 6),
-    ("SPD KT", 8, 9),
-    ("DIST NM", 10, 11),
-    ("FUEL LB", 12, 13),
-    ("TIME", 14, 14),
+    ("WIND", 4, 5),
+    ("SPD KT", 7, 8),
+    ("DIST NM", 9, 10),
+    ("FUEL LB", 11, 12),
+    ("TIME", 13, 13),
 ]
 
-TABLE_TOP = 36.3
+# Matches FRAME_TOP exactly - a 1.9pt gap here put the header's own top
+# rule right under the frame's own top edge, showing as a doubled line.
+TABLE_TOP = FRAME_TOP
 HEADER_TOP_HEIGHT = 21.0
 HEADER_BOTTOM_HEIGHT = 30.9
 ROW_HEIGHT = 21.0
@@ -548,10 +542,22 @@ def _draw_table_header(pdf, y):
     for line_y in (y, top_bottom, bottom_bottom):
         _hline(pdf, COLUMN_X[0], COLUMN_X[-1], line_y)
 
-    # Every boundary is ruled through both header rows on this template,
-    # including the ones inside a group's span.
+    # The top row only rules group boundaries - ruling every column
+    # boundary there too cut a stray divider straight through a group's
+    # own centred label (e.g. "WIND"). The row beneath rules every column.
+    group_edges = {COLUMN_X[0], COLUMN_X[-1]}
+    for label, start, end in COLUMN_GROUPS:
+        group_edges.add(COLUMN_X[start])
+        group_edges.add(COLUMN_X[end + 1])
+    for index, x in enumerate(COLUMN_X[:-1]):
+        inside_group = any(start < index <= end for _, start, end in COLUMN_GROUPS)
+        if not inside_group:
+            group_edges.add(x)
+
+    for x in sorted(group_edges):
+        _vline(pdf, x, y, top_bottom)
     for x in COLUMN_X:
-        _vline(pdf, x, y, bottom_bottom)
+        _vline(pdf, x, top_bottom, bottom_bottom)
 
     for label, start, end in COLUMN_GROUPS:
         center = (COLUMN_X[start] + COLUMN_X[end + 1]) / 2
@@ -560,12 +566,6 @@ def _draw_table_header(pdf, y):
     for index, label in enumerate(COLUMN_LABELS):
         center = (COLUMN_X[index] + COLUMN_X[index + 1]) / 2
         _text_center(pdf, center, top_bottom + 18.4, label, size=SIZE_TABLE)
-
-    for index, (line1, line2) in enumerate([("ETA", "ATA"), ("ACTUAL", "FUEL")]):
-        column = len(COLUMN_LABELS) + index
-        center = (COLUMN_X[column] + COLUMN_X[column + 1]) / 2
-        _text_center(pdf, center, y + 34.5, line1, size=SIZE_TABLE)
-        _text_center(pdf, center, y + 44.3, line2, size=SIZE_TABLE)
 
     return bottom_bottom
 
@@ -635,6 +635,17 @@ def _start_table_page(pdf, data):
     return _draw_table_header(pdf, _start_blank_page(pdf, data))
 
 
+def _drop_origin_row(rows):
+    """An alternate plan starts where the main route ended, so ForeFlight
+    repeats that airport as the block's own origin row - no heading, no
+    course, just the taxi fuel. The operator's sheet leaves it out: its
+    alternate blocks open on the first navaid, while the main block does
+    keep its own origin row."""
+    if rows and not value(rows[0].get("heading")).strip(" -"):
+        return rows[1:]
+    return rows
+
+
 def draw_navlog_pages(pdf, data):
     y = _start_table_page(pdf, data)
 
@@ -662,7 +673,7 @@ def draw_navlog_pages(pdf, data):
         route_text = value(routes.get(route_key)).replace("Route", "").strip()
         banner_right = f"Route {route_text}" if route_text else ""
 
-        blocks.append((banner_left, banner_right, rows))
+        blocks.append((banner_left, banner_right, _drop_origin_row(rows)))
 
     for banner_left, banner_right, rows in blocks:
         if banner_left is not None:

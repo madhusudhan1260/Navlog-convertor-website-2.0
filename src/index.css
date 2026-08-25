@@ -1,82 +1,9 @@
 /* ==================================================
-   EFLIGHT AI — DESIGN SYSTEM
-   Typography · Colour · Elevation · Base reset
+   EFLIGHT AI — BASE RESET
+   Design tokens live in App.css; this file only sets
+   up the document so first paint doesn't flash a
+   different theme before App.css takes over.
    ================================================== */
-
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
-
-:root {
-  /* ---- Type ---- */
-  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
-  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-
-  /* ---- Shell (deep navy) ---- */
-  --shell-950: #070d1b;
-  --shell-900: #0c1424;
-  --shell-800: #141f36;
-  --shell-700: #1e2d4a;
-  --shell-600: #2a3f66;
-
-  /* ---- Neutrals (night) ----
-     Surfaces climb from the page well up to the raised card; the ink
-     ramp runs the other way, brightest for primary copy. Every surface
-     is a solid navy rather than a translucent white so stacked glass
-     panels don't wash out into grey. */
-  --white: #ffffff;
-  --paper: #101a2f;
-  --paper-2: #16223c;
-  --canvas: #060a15;
-  --sunken: #0b1322;
-  --line: rgba(148, 174, 214, 0.14);
-  --line-strong: rgba(148, 174, 214, 0.26);
-
-  --ink-900: #eaf1ff;
-  --ink-800: #d3e0f5;
-  --ink-600: #a5b8d6;
-  --ink-500: #8497b8;
-  --ink-400: #647794;
-
-  /* ---- Brand & accents ---- */
-  --blue-700: #1d4ed8;
-  --blue-600: #2563eb;
-  --blue-500: #3b82f6;
-  --blue-400: #60a5fa;
-
-  --indigo: #6366f1;
-  --violet: #8b5cf6;
-  --cyan: #06b6d4;
-  --teal: #14b8a6;
-  --emerald: #10b981;
-  --amber: #f59e0b;
-  --rose: #f43f5e;
-
-  /* ---- Section accent (overridden per section) ---- */
-  --accent: var(--blue-600);
-  --accent-soft: rgba(37, 99, 235, 0.1);
-  --accent-line: rgba(37, 99, 235, 0.28);
-
-  /* ---- Elevation ----
-     On a dark field a shadow alone reads as nothing, so each step pairs
-     a black drop with a hairline top highlight to lift the edge. */
-  --sh-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --sh-sm: 0 2px 10px rgba(0, 0, 0, 0.45);
-  --sh-md: 0 10px 30px rgba(0, 0, 0, 0.5);
-  --sh-lg: 0 26px 60px rgba(0, 0, 0, 0.6);
-  --sh-brand: 0 14px 34px rgba(59, 130, 246, 0.4);
-  --edge: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-
-  /* ---- Shape ---- */
-  --r-sm: 8px;
-  --r: 12px;
-  --r-md: 16px;
-  --r-lg: 22px;
-  --r-xl: 28px;
-
-  --ring: 0 0 0 3px rgba(96, 165, 250, 0.32);
-
-  color-scheme: dark;
-}
 
 * {
   box-sizing: border-box;
@@ -90,59 +17,34 @@ body,
 
 body {
   margin: 0;
-  font-family: var(--font-ui);
+  background-color: #f8f9fa;
+  color: #202124;
+  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   font-size: 15px;
   line-height: 1.55;
-  color: var(--ink-900);
-  background-color: var(--canvas);
-  /* Base wash. Mirrors the first layer of .bg-decor so there is no
-     colour jump between first paint and the ambient layer mounting. */
-  background-image:
-    radial-gradient(1400px 700px at 50% -18%, rgba(37, 99, 235, 0.22), transparent 68%),
-    radial-gradient(1100px 800px at 100% 110%, rgba(124, 58, 237, 0.18), transparent 66%),
-    linear-gradient(180deg, #070d1c 0%, #060a15 45%, #080e1e 100%);
-  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-h1,
-h2,
-h3,
-h4,
-p {
+h1, h2, h3, h4, p {
   margin: 0;
-}
-
-h1,
-h2,
-h3 {
-  font-family: var(--font-display);
-  letter-spacing: -0.02em;
 }
 
 button {
   font-family: inherit;
   cursor: pointer;
   border: none;
+  background: none;
 }
 
 a {
   text-decoration: none;
 }
 
-input,
-select,
-textarea {
+input, select, textarea {
   font-family: inherit;
   font-size: 14px;
-  color: var(--ink-900);
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: var(--ink-400);
 }
 
 /* numerals line up in data-heavy fields */
@@ -161,7 +63,7 @@ input,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(129, 140, 248, 0.35);
+  background: rgba(32, 33, 36, 0.2);
   border-radius: 99px;
   border: 3px solid transparent;
   background-clip: content-box;
@@ -169,11 +71,11 @@ input,
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 140, 248, 0.6);
+  background: rgba(32, 33, 36, 0.35);
   background-clip: content-box;
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.42);
-  color: #fff;
+  background: rgba(26, 115, 232, 0.2);
+  color: #202124;
 }
