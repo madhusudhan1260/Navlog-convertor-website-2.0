@@ -634,38 +634,28 @@ def convert_with_claude(master_json, template="MLOVE"):
     # so the max is the cruise figure). Best-effort only.
     waypoints = array(main.get("waypoints"))
 
-    # Every leg from -TOC- to -TOD- (both included) is still ramping up to
-    # or easing off cruise speed, so none of them - not just the two
-    # boundary rows - is a trustworthy "cruise TAS" reading on its own.
-    # VTBBD's own navlog table already excludes that whole span, not just
-    # -TOC-/-TOD- themselves, when it works out the figure to stamp across
-    # it; this page-1 TAS has to exclude the same span or the two numbers
-    # disagree (a genuine plateau leg outside the span reads lower than
-    # some transitional leg still inside it).
-    def _outside_toc_tod_span(rows):
-        span = [False] * len(rows)
-        inside = False
-        for index, wpt in enumerate(rows):
+    # -TOC-/-TOD- themselves can carry a blended or spuriously high figure
+    # of their own, not the cruise speed - but every other leg between them
+    # is a genuine reading (climb/descent legs fly slower, cruise legs fly
+    # at the real cruise TAS), so only the two markers themselves are
+    # excluded from the search, matching VTBBD's own navlog table logic in
+    # _max_tas_at_toc_tod (vtbbd.py) so the two figures never disagree.
+    def _exclude_toc_tod_markers(rows):
+        excluded = []
+        for wpt in rows:
             name = str(wpt.get("waypoint", "")).strip(" -").upper()
-            if name == "TOC":
-                inside = True
-                span[index] = True
-            elif name == "TOD":
-                span[index] = True
-                inside = False
-            elif inside:
-                span[index] = True
-        return [wpt for index, wpt in enumerate(rows) if not span[index]]
+            if name in ("TOC", "TOD"):
+                continue
+            excluded.append(wpt)
+        return excluded
 
     # VTJOE quotes the highest TAS anywhere in the plan, alternates
     # included - its reference prints 501, which is reached on the
-    # diversion leg rather than on the main route. Each route's own span
-    # is excluded independently so a climb on one leg can't be paired
-    # with a descent on another.
-    tas_sources = _outside_toc_tod_span(waypoints)
+    # diversion leg rather than on the main route.
+    tas_sources = _exclude_toc_tod_markers(waypoints)
     if template == "VTJOE":
-        tas_sources += _outside_toc_tod_span(array(alt1.get("waypoints")))
-        tas_sources += _outside_toc_tod_span(array(alt2.get("waypoints")))
+        tas_sources += _exclude_toc_tod_markers(array(alt1.get("waypoints")))
+        tas_sources += _exclude_toc_tod_markers(array(alt2.get("waypoints")))
 
     max_tas = 0
     for wpt in tas_sources:

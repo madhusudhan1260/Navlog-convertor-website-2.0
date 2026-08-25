@@ -456,27 +456,32 @@ def _max_tas_at_toc_tod(rows):
     a blended or spuriously high figure of their own, not the cruise
     speed either. The operator wants every row from -TOC- through -TOD-,
     both boundaries included, overwritten with a single uniform value:
-    the highest TAS among the rows outside that span (the genuine cruise
-    figure), so -TOC-/-TOD-'s own numbers can't feed back into what
-    everything in between gets set to."""
+    the highest TAS anywhere on the leg, found by searching every row
+    EXCEPT the two -TOC-/-TOD- markers themselves (their own numbers
+    can't feed back into what gets picked) - a genuine cruise-segment
+    figure like 442 has to win even though it sits inside the span being
+    overwritten, not just whatever's highest outside it."""
     rows = list(rows or [])
 
     span = [False] * len(rows)
+    boundary = [False] * len(rows)
     inside = False
     for index, row in enumerate(rows):
         waypoint = value(row.get("waypoint")).strip(" -").upper()
         if waypoint == "TOC":
             inside = True
             span[index] = True
+            boundary[index] = True
         elif waypoint == "TOD":
             span[index] = True
+            boundary[index] = True
             inside = False
         elif inside:
             span[index] = True
 
     tas_values = []
     for index, row in enumerate(rows):
-        if span[index]:
+        if boundary[index]:
             continue
         try:
             tas_values.append(float(value(row.get("tas"))))
