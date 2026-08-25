@@ -25,7 +25,6 @@ from werkzeug.utils import secure_filename
 from htmlParser import parse_html
 from claude import convert_with_claude
 from pdfGenerator import generate_pdf
-from auth import AUTH_CONFIGURED, login_view, require_auth
 
 
 # =====================================================
@@ -34,20 +33,14 @@ from auth import AUTH_CONFIGURED, login_view, require_auth
 
 app = Flask(__name__)
 
-# Any origin may attempt a request; the session token decides whether it
-# gets an answer.
-#
-# An origin allowlist was tried and removed. It has to name every frontend
-# URL exactly, so a renamed or duplicated Vercel project silently breaks
-# the site with a browser-only failure that leaves no trace in the server
-# logs — real operational cost, for very little here. The token lives in
-# sessionStorage, not a cookie, so a browser never attaches it to a
-# cross-site request automatically, and the same-origin policy stops a
-# hostile page reading it. Every route that matters is behind @require_auth
-# regardless of who is asking.
+# Any origin may attempt a request - there is no sign-in gate behind
+# these routes any more, so this is purely permissive rather than resting
+# on a token check elsewhere. Fine for a tool run locally or on a private
+# network; do not expose this server on the open internet without adding
+# access control back.
 CORS(
     app,
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type"],
     methods=["GET", "POST", "OPTIONS"],
 )
 
@@ -124,12 +117,8 @@ DEFAULT_TEMPLATE = "MLOVE"
 # =====================================================
 
 @app.route("/generated/<path:filename>")
-@require_auth
 def generated_files(filename):
 
-    # Behind auth as well as /convert: the filenames are guessable enough
-    # (template + millisecond timestamp) that an open folder would leak
-    # finished flight plans to anyone who iterated them.
     return send_from_directory(
         GENERATED_FOLDER,
         filename
@@ -144,25 +133,6 @@ def generated_files(filename):
 def home():
 
     return "🚀 EFLIGHT AI Backend Running"
-
-
-# =====================================================
-# AUTH
-# =====================================================
-
-@app.route("/login", methods=["POST"])
-def login():
-
-    return login_view()
-
-
-@app.route("/session", methods=["GET"])
-@require_auth
-def session_check():
-
-    # Lets the frontend confirm a stored token is still good before it
-    # renders the dashboard, instead of finding out on the first upload.
-    return jsonify({"valid": True})
 
 
 # =====================================================
@@ -195,7 +165,6 @@ def empty_route():
 # =====================================================
 
 @app.route("/convert", methods=["POST"])
-@require_auth
 def convert():
 
     try:
@@ -477,13 +446,6 @@ if __name__ == "__main__":
         f"🚀 Backend Running on {PUBLIC_URL}"
 
     )
-
-    if not AUTH_CONFIGURED:
-        print(
-            "⚠️  AUTH NOT CONFIGURED — /login, /convert and /generated "
-            "will refuse every request.\n"
-            "    Set AUTH_EMAIL, AUTH_PASSWORD_HASH and SECRET_KEY."
-        )
 
     app.run(
 

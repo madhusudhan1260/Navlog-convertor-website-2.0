@@ -139,14 +139,6 @@ def draw_time_section(pdf, data):
     write(pdf, etd_text, 310, 105, 120, {"size": 8.5, "lineBreak": False})
     write(pdf, eta_text, 426, 105, 120, {"size": 8.5, "lineBreak": False})
 
-    step_climb = find_value(time, summary, "stepClimb", "step_climb")
-    isa_val = find_value(time, summary, "isa", "stepClimbIsa", "step_climb_isa")
-
-    if step_climb and isa_val and "(ISA:" not in step_climb:
-        step_climb_text = f"{step_climb} (ISA: {isa_val})"
-    else:
-        step_climb_text = step_climb
-
     plnd_route = find_value(
         time, summary,
         "plannedRouteDistance", "plndRoute", "plnd_route", "plannedRoute",
@@ -161,11 +153,10 @@ def draw_time_section(pdf, data):
     ).upper()
     tas_val = find_value(time, summary, "tas")
 
-    labelled_value(pdf, "STEP CLIMB", step_climb_text, 312, 124, 57, 220)
-    labelled_value(pdf, "PLND ROUTE", plnd_route, 312, 141, 89, 220)
-    labelled_value(pdf, "AVG WINDS", avg_winds, 312, 155, 89, 220)
-    labelled_value(pdf, "AVG.WC", avg_wc, 312, 168, 89, 220)
-    labelled_value(pdf, "TAS", tas_val, 312, 181, 89, 220)
+    labelled_value(pdf, "PLND ROUTE", plnd_route, 312, 124, 89, 220)
+    labelled_value(pdf, "AVG WINDS", avg_winds, 312, 138, 89, 220)
+    labelled_value(pdf, "AVG.WC", avg_wc, 312, 151, 89, 220)
+    labelled_value(pdf, "TAS", tas_val, 312, 164, 89, 220)
 
 
 def draw_fuel_section(pdf, data):
@@ -179,6 +170,12 @@ def draw_fuel_section(pdf, data):
             fuel.get("trip"),
             find_value(fuel, "tripTime", "trip_time"),
             find_value(fuel, "tripDistance", "trip_distance"),
+        ),
+        (
+            "MAX TRIP FUEL",
+            fuel.get("maxTripFuel"),
+            "",
+            "",
         ),
         (
             "CONTINGENCY",
@@ -229,7 +226,7 @@ def draw_fuel_section(pdf, data):
             "",
         ),
     ]
-    rows_y = [219, 232, 245, 259, 272, 285, 298, 312, 325, 336]
+    rows_y = [219, 232, 245, 258, 272, 285, 298, 311, 325, 338, 349]
 
     for row, y in zip(fuel_rows, rows_y):
         write(pdf, row[0], 74, y, 92, {"size": 8.5, "lineBreak": False})
@@ -247,13 +244,14 @@ def draw_weight_section(pdf, data):
         ("BOW", weight.get("basicOperatingWeight")),
         ("PAX", weight.get("pax")),
         ("CC", weight.get("cc")),
+        ("CARGO", weight.get("cargo")),
         ("LOAD", weight.get("load")),
         ("ZFW", weight.get("zeroFuelWeight")),
         ("T/O FUEL", weight.get("takeoffFuel")),
         ("TOW", weight.get("takeoffWeight")),
         ("ELW", weight.get("estimatedLandingWeight")),
     ]
-    rows_y = [222, 236, 247, 259, 272, 285, 298, 311]
+    rows_y = [222, 236, 247, 259, 271, 284, 297, 310, 323]
 
     for row, y in zip(weight_rows, rows_y):
         write(pdf, row[0], 312, y, 53, {"size": 8.5, "lineBreak": False})
@@ -264,7 +262,7 @@ def draw_weight_section(pdf, data):
 
 def draw_misc_section(pdf, data):
     misc = data.get("page1", {}).get("misc", {})
-    section_heading(pdf, "MISC", 72, 347, 220)
+    section_heading(pdf, "MISC", 72, 360, 220)
 
     pln_profile = value(misc.get("plannedProfile")).upper()
 
@@ -275,19 +273,19 @@ def draw_misc_section(pdf, data):
     # Divider lines sit ~5pt clear of the cap-height of the label below
     # them. Text drawn at baseline Y occupies roughly Y-6 upwards, so a
     # rule any closer than that cuts straight through the lettering.
-    labelled_value(pdf, "PLN PROFILE", pln_profile, 74, 360, 90, 470)
-    line(pdf, 70, 373, 542, 373, 0.7)
+    labelled_value(pdf, "PLN PROFILE", pln_profile, 74, 373, 90, 470)
+    line(pdf, 70, 386, 542, 386, 0.7)
 
     raw_route = value(misc.get("atcRoute")).upper()
     clean_route = raw_route.replace("ROUTE", "").strip() if raw_route.startswith("ROUTE") else raw_route
-    labelled_value(pdf, "ATC ROUTE", clean_route, 72, 384, 56, 470)
-    line(pdf, 70, 399, 542, 399, 0.4)
+    labelled_value(pdf, "ATC ROUTE", clean_route, 72, 397, 56, 470)
+    line(pdf, 70, 412, 542, 412, 0.4)
 
 
 def draw_operational_section(pdf, data):
     operational = data.get("page1", {}).get("operational", {})
 
-    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 72, 411, 81, 455)
+    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 72, 424, 81, 455)
 
     tofl = operational.get("tofl")
     v_speeds = operational.get("vSpeeds") or operational.get("v1v2v2vt")
@@ -298,16 +296,16 @@ def draw_operational_section(pdf, data):
         f"V1/VR/V2/VT {('_' * 13) if not v_speeds else value(v_speeds)}   "
         f"T/O WT {('_' * 16) if not to_wt else value(to_wt)}",
         72,
-        442,
+        455,
         480,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 70, 453, 542, 453, 0.4)
+    line(pdf, 70, 466, 542, 466, 0.4)
 
-    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 72, 464, 78, 455)
-    line(pdf, 70, 501, 542, 501, 0.4)
+    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 72, 477, 78, 455)
+    line(pdf, 70, 514, 542, 514, 0.4)
 
-    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 72, 512, 68, 455)
+    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 72, 525, 68, 455)
 
     vref_vac = operational.get("vrefVac")
     flaps = operational.get("flaps")
@@ -316,11 +314,11 @@ def draw_operational_section(pdf, data):
         f"LDG DATA: VREF/VAC {('_' * 12) if not vref_vac else value(vref_vac)}   "
         f"FLAPS{('_' * 18) if not flaps else value(flaps)}",
         72,
-        537,
+        550,
         480,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 70, 547, 542, 547, 0.4)
+    line(pdf, 70, 560, 542, 560, 0.4)
 
     operation_columns = [
         [("CHOCKS ON", operational.get("chocksOn")), ("CHOCKS OFF", operational.get("chocksOff")), ("BLOCK TIME", operational.get("blockTime"))],
@@ -332,37 +330,37 @@ def draw_operational_section(pdf, data):
 
     for x, column in zip(columns_x, operation_columns):
         for row_index, row in enumerate(column):
-            y = 558 + row_index * 13.3
+            y = 571 + row_index * 13.3
             write(pdf, row[0], x, y, 62, {"size": 8.5, "lineBreak": False})
             line(pdf, x + 58, y + 2, x + 106, y + 2)
             if row[1]:
                 write(pdf, row[1], x + 61, y, 44, {"size": 8.5, "lineBreak": False})
 
-    write(pdf, "RVSM CHECKS", 72, 613, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "TIME (UTC)", 158, 613, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT1", 230, 613, 60, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT2", 296, 613, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "RVSM CHECKS", 72, 626, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "TIME (UTC)", 158, 626, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT1", 230, 626, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT2", 296, 626, 60, {"size": 8.5, "lineBreak": False})
 
     for index, label_text in enumerate(["GROUND", "PRE-RVSM CHECK", "LEVEL OFF"]):
-        y = 626 + index * 13.2
+        y = 639 + index * 13.2
         write(pdf, label_text, 72, y, 90, {"size": 8.5, "lineBreak": False})
         line(pdf, 158, y + 2, 212, y + 2)
         line(pdf, 230, y + 2, 284, y + 2)
         line(pdf, 297, y + 2, 351, y + 2)
 
     # VTBBD-only: boxed ALT ATIS note, to the right of the RVSM block.
-    box(pdf, 360, 598, 194, 57)
-    write(pdf, "ALT ATIS :", 366, 615, 100, {"size": 8.5, "lineBreak": False})
+    box(pdf, 360, 611, 194, 57)
+    write(pdf, "ALT ATIS :", 366, 628, 100, {"size": 8.5, "lineBreak": False})
     alt_atis = operational.get("altAtis")
     if alt_atis:
-        write(pdf, alt_atis, 366, 630, 180, {"size": 8})
+        write(pdf, alt_atis, 366, 643, 180, {"size": 8})
 
 
 def draw_alternates(pdf, data):
     alternates = data.get("page1", {}).get("alternates", [])
 
     for index, alternate in enumerate(alternates[:2]):
-        y = 672 + index * 27
+        y = 685 + index * 27
         raw_route = value(alternate.get("route")).replace("Route", "").strip()
 
         alt_label = alternate.get("name", f"ALT{index + 1}")
@@ -423,6 +421,19 @@ def approach_and_land_fuel(rows):
     return ""
 
 
+def _drop_origin_row(rows):
+    """An alternate plan starts where the main route ended, so ForeFlight
+    repeats that airport as the block's own origin row - no heading, no
+    course, just a repeated distance/fuel figure the very next row's own
+    REM columns already carry. First blanking just its stray TIME/REM
+    cell wasn't enough - the operator's markup on both alternate blocks
+    circled the whole row, so it comes out entirely now, the same fix
+    vtkcm.py/vthyr.py/default1.py already carry for the same row."""
+    if rows and not value(rows[0].get("heading")).strip(" -"):
+        return rows[1:]
+    return rows
+
+
 def draw_summary_row(pdf, label, fuel_val, time_val, y):
     """The bold "APPROCH AND LAND" / "MISSED APPROACH" divider rows that
     VTBBD inserts between the main navlog and each alternate's navlog -
@@ -438,24 +449,51 @@ def draw_summary_row(pdf, label, fuel_val, time_val, y):
     return y + height
 
 
+# FIX: this used to draw the main navlog on page 2 with a hardcoded 660pt
+# ceiling, then unconditionally stamp "APPROCH AND LAND" / the alternate
+# banner / "MISSED APPROACH" right where the main navlog happened to stop
+# - even mid-route, if the leg was long enough that rows were still left
+# over. Those leftover rows (plus whatever of the alternate's own navlog
+# didn't fit) were then dumped into a SINGLE fixed page 3 capped at 250pt
+# and its own "remaining" was never checked again, so anything past that
+# was silently dropped - the exact bug an operator reported: waypoints
+# after SURGO (mid-alternate) never printed anywhere. Rewritten so every
+# navlog section draws in a loop that keeps adding pages until its rows
+# are exhausted, and every summary row / banner checks it has room before
+# drawing rather than assuming the fixed page layout above always fits.
+NAVLOG_ROWS_MAX_Y = 744
+
+
 def draw_pages_two_and_three(pdf, data):
     title = data.get("page1", {}).get("header", {}).get("routeTitle", "")
     registration = data.get("page1", {}).get("header", {}).get("registration", "")
-    fuel = data.get("page1", {}).get("fuel", {})
 
-    pdf.showPage()
-    route_header(pdf, title, registration)
-    box(pdf, PAGE["left"], 32, 496, 728)
+    def new_navlog_page():
+        pdf.showPage()
+        route_header(pdf, title, registration)
+        box(pdf, PAGE["left"], 32, 496, 728)
+        return draw_navlog_header(pdf, 32)
 
-    y = draw_navlog_header(pdf, 32)
-    main_result = draw_navlog_rows(pdf, data.get("mainNavlog", []), y, 660)
-    y = main_result["y"]
+    def draw_all_rows(rows, y):
+        remaining = rows
+        while remaining:
+            result = draw_navlog_rows(pdf, remaining, y, NAVLOG_ROWS_MAX_Y)
+            y = result["y"]
+            remaining = result["remaining"]
+            if remaining:
+                y = new_navlog_page()
+        return y
+
+    y = new_navlog_page()
+    y = draw_all_rows(data.get("mainNavlog", []), y)
 
     # Fuel state after the arrival at the destination: the main leg's
     # final REM figure less the approach & landing allowance. The MISSED
     # APPROACH row below repeats it - in the reference both rows carry
     # the same figure, since a go-around starts from that same state.
     approach_fuel = approach_and_land_fuel(data.get("mainNavlog", []))
+    if y + 20 > NAVLOG_ROWS_MAX_Y:
+        y = new_navlog_page()
     y = draw_summary_row(pdf, "APPROCH AND LAND", approach_fuel, APPROACH_LANDING_TIME, y)
 
     alternate_name = data.get("page1", {}).get("flightInfo", {}).get("alternate1", "")
@@ -465,30 +503,35 @@ def draw_pages_two_and_three(pdf, data):
     title_left = f"Alternate route for {alternate_name}"
     title_right = f"Route {clean_alt_route}" if clean_alt_route else ""
 
+    if y + 24 > NAVLOG_ROWS_MAX_Y:
+        y = new_navlog_page()
     y = draw_navlog_title(pdf, title_left, title_right, y)
+
+    if y + 20 > NAVLOG_ROWS_MAX_Y:
+        y = new_navlog_page()
     y = draw_summary_row(pdf, "MISSED APPROACH", approach_fuel, APPROACH_LANDING_TIME, y)
 
-    alternate_result = draw_navlog_rows(pdf, data.get("alternate1Navlog", []), y, 744)
-
-    pdf.showPage()
-    route_header(pdf, title, registration)
-    box(pdf, PAGE["left"], 32, 496, 728)
-
-    y = draw_navlog_header(pdf, 32)
-
-    remaining_rows = (
-        main_result["remaining"]
-        + alternate_result["remaining"]
-        + data.get("alternate2Navlog", [])
-    )
-
-    continuation = draw_navlog_rows(pdf, remaining_rows, y, 250)
-    y = continuation["y"]
+    y = draw_all_rows(_drop_origin_row(data.get("alternate1Navlog", [])), y)
 
     # Same again for the diversion leg: alternate 1's final REM figure
     # less the approach & landing allowance.
     alt1_approach_fuel = approach_and_land_fuel(data.get("alternate1Navlog", []))
+    if y + 20 > NAVLOG_ROWS_MAX_Y:
+        y = new_navlog_page()
     y = draw_summary_row(pdf, "APPROCH AND LAND", alt1_approach_fuel, APPROACH_LANDING_TIME, y)
+
+    y = draw_all_rows(_drop_origin_row(data.get("alternate2Navlog", [])), y)
+
+    # AIRPORT INFO needs a fresh page of its own if what's left on this
+    # one can't fit its heading, column header row, every airport row,
+    # and the footnote block beneath it.
+    airport_count = len(data.get("airportInformation", []))
+    needed = 22 + 20 + 22 + 22 * airport_count + 20 + 12 * 6
+    if y + needed > NAVLOG_ROWS_MAX_Y:
+        pdf.showPage()
+        route_header(pdf, title, registration)
+        box(pdf, PAGE["left"], 32, 496, 728)
+        y = 32
 
     y += 22
     write(pdf, "AIRPORT INFO", PAGE["left"], y, 150, {"size": 8.5, "bold": False, "lineBreak": False})

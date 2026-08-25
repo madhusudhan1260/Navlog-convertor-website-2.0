@@ -388,7 +388,10 @@ def draw_page_one(pdf, data):
     level_rows_y = [398.30 + 14.14 * i for i in range(5)]
     for row, y in zip(level_calcs[:5], level_rows_y):
         fl_disp = value(row.get("fl"))
-        if fl_disp and not fl_disp.upper().startswith("FL"):
+        # Below the transition altitude a level-calc row is a raw altitude
+        # ("3000 ft"), not a flight level - only bare numbers get an "FL "
+        # prefix added, not values that already carry their own unit.
+        if fl_disp and not fl_disp.upper().startswith("FL") and "ft" not in fl_disp.lower():
             fl_disp = f"FL {fl_disp}"
         write(pdf, fl_disp, 55.21, y, 30, {"size": 9.4, "lineBreak": False})
         write(pdf, row.get("wc", ""), 101.88, y, 25, {"size": 9.4, "lineBreak": False})
@@ -724,15 +727,13 @@ def draw_pages_two_and_three(pdf, data):
             span_width += airport_columns[next_idx][2]
             next_idx += 1
 
+        # A single merged box, even when this heading spans two columns
+        # ("LONGEST RWY" over runwayDesignator/runwayLength) - drawing the
+        # two sub-column boxes here too, on top of this one, put a stray
+        # vertical divider straight through the centred heading text. The
+        # data rows below draw those two cells separately on their own.
         box(pdf, x, y, span_width, 22.38)
         write(pdf, heading, x + 2, y + 14.53, span_width - 4, {"size": 9.4, "align": "center", "lineBreak": False})
-
-        if next_idx > idx + 1:
-            sub_x = x
-            for sub_i in range(idx, next_idx):
-                sub_width = airport_columns[sub_i][2]
-                box(pdf, sub_x, y, sub_width, 22.38)
-                sub_x += sub_width
 
         x += span_width
         idx = next_idx

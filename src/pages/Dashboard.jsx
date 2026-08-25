@@ -3,7 +3,6 @@ import { useNavigate, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Icons";
 import { API_URL } from "../api";
-import { authHeader, signOut } from "../auth";
 
 // Mirrors claude.py's PAX_CATEGORY_WEIGHTS - shown here only as a live
 // preview before the operator submits; the backend is the source of truth
@@ -250,8 +249,7 @@ const FIELD_USAGE = {
   flightLevel: ALL_FORMATS,
 
   paxWeight: ALL_FORMATS,
-  maxTripFuel: ["DEFAULT", "DEFAULT1", "VTVIK", "VTCSP", "VTAHP", "INDOPACIFIC1",
-                "INDOPACIFIC2", "VTKCM"],
+  maxTripFuel: ALL_FORMATS,
   endurance: ALL_FORMATS,
   contingencyFuel: ALL_FORMATS,
   contingencyTime: ALL_FORMATS,
@@ -676,9 +674,7 @@ function Dashboard() {
 
           headers: {
 
-            "Content-Type": "multipart/form-data",
-
-            ...authHeader()
+            "Content-Type": "multipart/form-data"
 
           }
 
@@ -686,24 +682,7 @@ function Dashboard() {
 
       );
 
-      // /generated is behind auth too, so the returned URL cannot just be
-      // dropped into an <a href> — a plain navigation carries no
-      // Authorization header and would come back 401. Fetch it with the
-      // token and hand the download an in-memory blob instead.
-      const pdfResponse = await fetch(response.data.pdf, {
-        headers: authHeader()
-      });
-
-      if (!pdfResponse.ok) {
-        throw new Error(`Could not retrieve the generated PDF (${pdfResponse.status}).`);
-      }
-
-      const blob = await pdfResponse.blob();
-
-      setPdf((previous) => {
-        if (previous) URL.revokeObjectURL(previous);
-        return URL.createObjectURL(blob);
-      });
+      setPdf(response.data.pdf);
 
       setPdfName(response.data.pdf.split("/").pop() || "flight-plan.pdf");
 
@@ -718,17 +697,12 @@ function Dashboard() {
       // A blanket "Conversion Failed" hides the one thing worth knowing.
       // The backend already answers a failed /convert with
       // {success: false, message: "<the actual exception>"}, so surface
-      // that; a session that has quietly expired gets its own wording
-      // because the fix is to sign in again, not to change the navlog.
-      const status = error?.response?.status;
+      // that instead.
       const backendMessage = error?.response?.data?.message;
 
       let detail;
 
-      if (status === 401) {
-        detail = "Your session has expired. Sign in again and retry.";
-      }
-      else if (backendMessage) {
+      if (backendMessage) {
         detail = backendMessage;
       }
       else if (error?.message === "Network Error") {
@@ -834,7 +808,10 @@ function Dashboard() {
       return renderPaxBreakdown(field);
     }
 
-    if (field.withUnit) {
+    // The lbs/kg toggle (and the "<count> - <weight>" expansion it
+    // drives) only applies on VTBBD and TEST - every other format keeps
+    // a plain count with no unit or weight suffix.
+    if (field.withUnit && ["VTBBD", "TEST"].includes(form.selectedFormat)) {
       return renderCountWithUnit(field);
     }
 
@@ -1004,24 +981,6 @@ function Dashboard() {
 
     <div>
 
-      {/* ================= AMBIENT BACKGROUND ================= */}
-
-      <div className="bg-decor" aria-hidden="true">
-        <span className="sheet" />
-        <span className="orb o1" />
-        <span className="orb o2" />
-        <span className="orb o3" />
-        <span className="orb o4" />
-        <span className="orb o5" />
-        <span className="tracks" />
-        <span className="radar" />
-        <span className="compass" />
-        <span className="navaid n1" />
-        <span className="navaid n2" />
-        <span className="navaid n3" />
-        <span className="flight f3"><i /></span>
-      </div>
-
       {/* ================= HEADER ================= */}
 
       <header className="header">
@@ -1052,14 +1011,6 @@ function Dashboard() {
             OPS Generator
           </div>
 
-          <button
-            type="button"
-            className="header-tag as-button"
-            onClick={() => { signOut(); navigate("/", { replace: true }); }}
-          >
-            Sign out
-          </button>
-
         </div>
 
       </header>
@@ -1069,11 +1020,6 @@ function Dashboard() {
         {/* ================= HERO ================= */}
 
         <div className="hero">
-
-          <span className="flight f1" aria-hidden="true"><i /></span>
-          <span className="flight f2" aria-hidden="true"><i /></span>
-          <span className="flight f4" aria-hidden="true"><i /></span>
-          <span className="runway" aria-hidden="true" />
 
           <div className="eyebrow">
             {step === "format" ? "Step 1 of 2" : "Step 2 of 2"}

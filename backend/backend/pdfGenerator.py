@@ -182,6 +182,12 @@ def draw_fuel_section(pdf, data):
             find_value(fuel, "tripDistance", "trip_distance"),
         ),
         (
+            "MAX TRIP FUEL",
+            fuel.get("maxTripFuel"),
+            "",
+            "",
+        ),
+        (
             "CONTINGENCY",
             fuel.get("contingency"),
             find_value(fuel, "contingencyTime", "contingency_time"),
@@ -256,7 +262,7 @@ def draw_weight_section(pdf, data):
 
 def draw_misc_section(pdf, data):
     misc = data.get("page1", {}).get("misc", {})
-    section_heading(pdf, "MISC", 72, 344 + PAGE_OFFSET, 220)
+    section_heading(pdf, "MISC", 72, 358 + PAGE_OFFSET, 220)
 
     pln_profile = value(misc.get("plannedProfile")).upper()
 
@@ -266,26 +272,26 @@ def draw_misc_section(pdf, data):
     if flight_rules and not pln_profile.startswith(flight_rules):
         pln_profile = f"{flight_rules} {pln_profile}".strip()
 
-    labelled_value(pdf, "PLN PROFILE", pln_profile, 73, 364 + PAGE_OFFSET, 86, 470)
-    line(pdf, 70, 387 + PAGE_OFFSET, 542, 387 + PAGE_OFFSET, 0.7)
+    labelled_value(pdf, "PLN PROFILE", pln_profile, 73, 378 + PAGE_OFFSET, 86, 470)
+    line(pdf, 70, 401 + PAGE_OFFSET, 542, 401 + PAGE_OFFSET, 0.7)
 
     raw_route = value(misc.get("atcRoute")).upper()
     clean_route = raw_route.replace("ROUTE", "").strip() if raw_route.startswith("ROUTE") else raw_route
-    labelled_value(pdf, "ATC ROUTE", clean_route, 73, 398 + PAGE_OFFSET, 70, 470)
-    line(pdf, 70, 420 + PAGE_OFFSET, 542, 420 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "ATC ROUTE", clean_route, 73, 412 + PAGE_OFFSET, 70, 470)
+    line(pdf, 70, 434 + PAGE_OFFSET, 542, 434 + PAGE_OFFSET, 0.4)
 
 
 def draw_operational_section(pdf, data):
     operational = data.get("page1", {}).get("operational", {})
 
-    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 73, 431 + PAGE_OFFSET, 95, 455)
-    line(pdf, 70, 460 + PAGE_OFFSET, 542, 460 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 73, 445 + PAGE_OFFSET, 95, 455)
+    line(pdf, 70, 474 + PAGE_OFFSET, 542, 474 + PAGE_OFFSET, 0.4)
 
-    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 73, 471 + PAGE_OFFSET, 95, 455)
-    line(pdf, 70, 500 + PAGE_OFFSET, 542, 500 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 73, 485 + PAGE_OFFSET, 95, 455)
+    line(pdf, 70, 514 + PAGE_OFFSET, 542, 514 + PAGE_OFFSET, 0.4)
 
-    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 73, 511 + PAGE_OFFSET, 95, 455)
-    line(pdf, 70, 540 + PAGE_OFFSET, 542, 540 + PAGE_OFFSET, 0.4)
+    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 73, 525 + PAGE_OFFSET, 95, 455)
+    line(pdf, 70, 554 + PAGE_OFFSET, 542, 554 + PAGE_OFFSET, 0.4)
 
     operation_columns = [
         [("CHOCKS ON", operational.get("chocksOn")), ("CHOCKS OFF", operational.get("chocksOff")), ("BLOCK TIME", operational.get("blockTime"))],
@@ -297,19 +303,19 @@ def draw_operational_section(pdf, data):
     for column_index, column in enumerate(operation_columns):
         x = 73 + column_index * 118
         for row_index, row in enumerate(column):
-            y = (551 + row_index * 15) + PAGE_OFFSET
+            y = (565 + row_index * 15) + PAGE_OFFSET
             write(pdf, row[0], x, y, 62, {"size": 8.5, "lineBreak": False})
             line(pdf, x + 58, y + 2, x + 106, y + 2)
             if row[1]:
                 write(pdf, row[1], x + 61, y, 44, {"size": 8.5, "lineBreak": False})
 
-    write(pdf, "RVSM CHECKS", 73, 608 + PAGE_OFFSET, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "TIME (UTC)", 160, 608 + PAGE_OFFSET, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT1", 232, 608 + PAGE_OFFSET, 60, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT2", 298, 608 + PAGE_OFFSET, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "RVSM CHECKS", 73, 622 + PAGE_OFFSET, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "TIME (UTC)", 160, 622 + PAGE_OFFSET, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT1", 232, 622 + PAGE_OFFSET, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT2", 298, 622 + PAGE_OFFSET, 60, {"size": 8.5, "lineBreak": False})
 
     for index, label_text in enumerate(["GROUND", "PRE-RVSM CHECK", "LEVEL OFF"]):
-        y = (624 + index * 15) + PAGE_OFFSET
+        y = (638 + index * 15) + PAGE_OFFSET
         write(pdf, label_text, 73, y, 90, {"size": 8.5, "lineBreak": False})
         line(pdf, 160, y + 2, 214, y + 2)
         line(pdf, 232, y + 2, 286, y + 2)
@@ -320,7 +326,7 @@ def draw_alternates(pdf, data):
     alternates = data.get("page1", {}).get("alternates", [])
 
     for index, alternate in enumerate(alternates[:2]):
-        y = (678 + index * 32) + PAGE_OFFSET
+        y = (692 + index * 32) + PAGE_OFFSET
         raw_route = value(alternate.get("route")).replace("Route", "").strip()
 
         alt_label = alternate.get("name", f"ALT{index + 1}")

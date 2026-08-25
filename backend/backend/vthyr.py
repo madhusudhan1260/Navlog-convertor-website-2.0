@@ -22,8 +22,9 @@ from common import OUTPUT_DIRECTORY, find_value, value
 #   * a single ALTN1/FIRST ALTN ROUTE pair (no SECOND ALTN ROUTE on this
 #     particular reference, though the code still prints one if a second
 #     alternate is uploaded) with the dashed divider row before ENDURANCE
-#   * every weight prints in KG, not LBS - this operator's whole fleet
-#     reports fuel/weight in KG
+#   * weight unit is detected per upload (htmlParser.detect_weight_unit)
+#     and printed as whichever the source used - KG or LBS - defaulting
+#     to KG (this fleet's historical norm) when neither is detectable
 #   * DEP/DEST are lat/long coordinates ("3049N07653E"), not ICAO codes -
 #     no name ever follows the trailing dash, which _airport_display
 #     already handles correctly since it falls back to "-" alone when
@@ -48,6 +49,13 @@ CENTER_X = (FRAME_X0 + FRAME_X1) / 2
 BANNER_CENTER_X = 279.2
 
 PLAN_ROW_STEP = 14.13
+
+# The level-calc TIME cell is positional on this sheet, not calculated -
+# same convention as default1.py's own DIFFERENT LEVEL CALCULATION table:
+# "(0:00)" only on the second and fourth rows, every other row blank,
+# regardless of what the row's own computed time delta actually is.
+LEVEL_TIME_ROWS = (1, 3)
+LEVEL_TIME_TEXT = "(0:00)"
 
 AIRPORT_NAME_LOOKUP = {
     "VOHY": "BEGUMPET",
@@ -155,11 +163,12 @@ def _wrap(content, size, max_width, font=FONT):
 # --------------------------------------------------
 
 
-def _kg(v):
+def _weight(v, unit="KG"):
     v = value(v)
     if not v:
         return ""
-    return v if v.upper().endswith("KG") else f"{v} KG"
+    unit = (unit or "KG").strip().upper()
+    return v if v.upper().endswith(unit) else f"{v} {unit}"
 
 
 def _nm(v):
@@ -190,7 +199,9 @@ def _rank(name):
 
 
 def _cruise_tail(profile_text):
-    match = re.search(r"@\s*FL\d+\s*-\s*(.+)$", value(profile_text), re.IGNORECASE)
+    # This fleet's PLN PROFILE quotes altitude in feet ("@ 2000' - ..."),
+    # not a flight level ("@ FL290 - ..."), so both forms need to match.
+    match = re.search(r"@\s*(?:FL\d+|\d+')\s*-\s*(.+)$", value(profile_text), re.IGNORECASE)
     return match.group(1).strip().upper() if match else ""
 
 
@@ -236,9 +247,12 @@ def _page_header(pdf, data):
     # right-aligned to the frame edge on their own - measured off the
     # reference, where a much shorter first line ("dep -") and a longer
     # second line share the exact same x0.
+    # Shifted up from the single-line baseline (27.93) - the second of
+    # these two lines sat right on FRAME_TOP (34.4), so the frame's own
+    # top border cut straight through "2906N07558E   VTHYR".
     dep, dest = route_title.split(" - ", 1)
-    _text(pdf, 450.71, 27.93, f"{dep} -")
-    _text(pdf, 450.71, 39.06, f"{dest}     {registration}".strip())
+    _text(pdf, 450.71, 18.93, f"{dep} -")
+    _text(pdf, 450.71, 30.06, f"{dest}     {registration}".strip())
 
 
 # --------------------------------------------------
@@ -252,6 +266,9 @@ def draw_page_one(pdf, data):
     time_info = page1.get("time", {})
     fuel = page1.get("fuel", {})
     weight = page1.get("weight", {})
+    # Detected off the upload itself (see claude.py) - some tails on this
+    # fleet report in LBS rather than the historical KG default.
+    unit = (fuel.get("weightUnit") or "KG").strip().upper()
     misc = page1.get("misc", {})
     header = page1.get("header", {})
     operational = page1.get("operational", {})
@@ -302,7 +319,7 @@ def draw_page_one(pdf, data):
     _text(pdf, 251.2, 114.25, "CRUISE")
     _text(pdf, 302.2, 114.25, ":")
 
-    cruise_lines = _wrap(value(misc.get("plannedProfile")).upper(), SIZE_CRUISE, 140.0)
+    cruise_lines = _wrap(value(misc.get("plannedProfile")).upper(), SIZE_CRUISE, 134.0)
     cruise_y = 104.67
     for cruise_line in cruise_lines[:4]:
         _text(pdf, 310.0, cruise_y, cruise_line, size=SIZE_CRUISE)
@@ -314,11 +331,15 @@ def draw_page_one(pdf, data):
     _text(pdf, 486.7, 114.25, f":{value(weight.get('pax'))}")
 
     # ---- MAIN ROUTE / crew ----
+    # Unlike VTKCM, this reference repeats the cruise-speed tail here
+    # (matching VTVIK's own convention), e.g. "2000' - 500 FPM 120 KIAS
+    # 3049N07634E ...".
     main_route = " ".join(
         part
         for part in [
             value(flight.get("flightLevel")),
-            "-",
+            "-" if _cruise_tail(misc.get("plannedProfile")) else "",
+            _cruise_tail(misc.get("plannedProfile")),
             value(data.get("routes", {}).get("mainRoute")),
         ]
         if part
@@ -343,11 +364,11 @@ def draw_page_one(pdf, data):
     ):
         _text(pdf, 50.5, y, left_label)
         _text(pdf, 130.86, y, ":")
-        _text_right(pdf, 202.53, y, _kg(left_val))
+        _text_right(pdf, 202.53, y, _weight(left_val, unit))
 
         _text(pdf, 301.4, y, right_label)
         _text(pdf, 375.21, y, ":")
-        _text_right(pdf, 474.21, y, _kg(right_val))
+        _text_right(pdf, 474.21, y, _weight(right_val, unit))
 
     _text(pdf, 50.5, 221.87, f"TOP CLIMB TEMP:{_space_fl(time_info.get('topClimbTemp'))}")
     _text(pdf, 301.4, 221.87, "WIND")
@@ -360,11 +381,24 @@ def draw_page_one(pdf, data):
         51.05,
         240.51,
         "- - - - - - - - PLAN TIME & FUEL - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - "
-        "PLAN WT (in KG) - - - - - - - - - - - - - - -",
+        f"PLAN WT (in {unit}) - - - - - - - - - - - - - - -",
     )
 
     alt1 = alternates[0] if len(alternates) > 0 else {}
     alt2 = alternates[1] if len(alternates) > 1 else {}
+
+    # FIX: everything below "DIFFERENT LEVEL CALCULATION" used fixed
+    # y-coordinates measured off the operator's reference, which only ever
+    # showed a single alternate. ALTN2 adds a row to plan_rows below (see
+    # the comment above it), which is fine on its own since divider_y/
+    # endurance_y are computed from grid_y and move with it - but nothing
+    # past that point followed, so DIFFERENT LEVEL CALCULATION and
+    # everything under it stayed put and got run straight over by
+    # ENDURANCE and SECOND ALTN ROUTE. Shifting the whole rest of the page
+    # down by one plan row's height when a second alternate is present
+    # reopens exactly the gap the reference already validated for the
+    # single-alternate case.
+    _shift = PLAN_ROW_STEP if alt2 else 0.0
 
     # Same grid VTVIK uses: TRIP/TAXI/CONTINGENCY 5%/FINAL RESERVE FUEL/
     # XTRA/ALTN1(/ALTN2), a dashed divider row, then ENDURANCE - all on
@@ -397,12 +431,12 @@ def draw_page_one(pdf, data):
         _text(pdf, 50.5, y, label)
         _text(pdf, 150.91, y, ":")
         _text(pdf, 161.21, y, time_val)
-        _text_right(pdf, 232.96, y, _kg(fuel_val))
+        _text_right(pdf, 232.96, y, _weight(fuel_val, unit))
 
     for (label, weight_val), y in zip(weight_rows, grid_y):
         _text(pdf, 301.4, y, label)
         _text(pdf, 365.94, y, ":")
-        _text_right(pdf, 420.92, y, _kg(weight_val))
+        _text_right(pdf, 420.92, y, _weight(weight_val, unit))
 
     divider_y = grid_y[len(plan_rows)]
     endurance_y = grid_y[len(plan_rows) + 1]
@@ -411,7 +445,7 @@ def draw_page_one(pdf, data):
 
     alt_summary_y = grid_y[len(plan_rows) - 1] + 3.0
     alt1_dist = _nm(alt1.get("distance"))
-    min_divert = _kg(fuel.get("minDivertFuel"))
+    min_divert = _weight(fuel.get("minDivertFuel"), unit)
     _text(
         pdf, 301.4, alt_summary_y,
         f"ALTN : {alt1_dist}         MIN DIVERT FUEL: {min_divert}",
@@ -428,39 +462,42 @@ def draw_page_one(pdf, data):
 
     _text(pdf, 90.11, endurance_y, "ENDURANCE:")
     _text(pdf, 161.21, endurance_y, fuel.get("enduranceTime"))
-    _text_right(pdf, 232.96, endurance_y, _kg(fuel.get("ramp")))
+    _text_right(pdf, 232.96, endurance_y, _weight(fuel.get("ramp"), unit))
 
     # ---- DIFFERENT LEVEL CALCULATION / ACTUALS ----
     _text(
         pdf,
         51.05,
-        376.74,
+        376.74 + _shift,
         "- - - - - DIFFERENT LEVEL CALCULATION - - - - - - - - - - - - - - - - - - - - - - - "
         "ACTUALS - - - - - - - - - - - - - - - - - - - -",
     )
 
-    _text(pdf, 64.06, 395.38, "FL")
-    _text(pdf, 100.08, 395.38, "WC")
-    _text(pdf, 140.37, 395.38, "TIME")
-    _text(pdf, 196.72, 395.38, "TRIP")
+    _text(pdf, 64.06, 395.38 + _shift, "FL")
+    _text(pdf, 100.08, 395.38 + _shift, "WC")
+    _text(pdf, 140.37, 395.38 + _shift, "TIME")
+    _text(pdf, 196.72, 395.38 + _shift, "TRIP")
 
-    level_y = 409.52
-    for row in level_calcs[:5]:
+    level_y = 409.52 + _shift
+    for index, row in enumerate(level_calcs[:5]):
         fl_disp = _space_fl(row.get("fl"))
-        if fl_disp and not fl_disp.upper().startswith("FL"):
+        # Below the transition altitude a level-calc row is a raw altitude
+        # ("3000 ft"), not a flight level - only bare numbers get an "FL "
+        # prefix added, not values that already carry their own unit.
+        if fl_disp and not fl_disp.upper().startswith("FL") and "ft" not in fl_disp.lower():
             fl_disp = f"FL {fl_disp}"
 
         _text(pdf, 58.2, level_y, fl_disp)
         _text(pdf, 101.9, level_y, row.get("wc"))
-        _text(pdf, 140.37, level_y, find_value(row, "timeAll") or value(row.get("time")))
-        _text_right(pdf, 221.93, level_y, _kg(row.get("trip")))
+        _text(pdf, 140.37, level_y, LEVEL_TIME_TEXT if index in LEVEL_TIME_ROWS else "")
+        _text_right(pdf, 221.93, level_y, _weight(row.get("trip"), unit))
         level_y += PLAN_ROW_STEP
 
     actual_rows = [
-        ("CHOCKS OFF", 263.64, "LANDING", 429.18, 402.13),
-        ("CHOCKS ON", 267.30, "AIRBORNE", 423.96, 423.02),
-        ("BLOCK TIME", 264.18, "FLT TIME", 429.95, 443.91),
-        ("BLOCK FUEL", 263.65, "FIC-ADC", 434.38, 464.79),
+        ("CHOCKS OFF", 263.64, "LANDING", 429.18, 402.13 + _shift),
+        ("CHOCKS ON", 267.30, "AIRBORNE", 423.96, 423.02 + _shift),
+        ("BLOCK TIME", 264.18, "FLT TIME", 429.95, 443.91 + _shift),
+        ("BLOCK FUEL", 263.65, "FIC-ADC", 434.38, 464.79 + _shift),
     ]
 
     for left_label, left_x, right_label, right_x, y in actual_rows:
@@ -470,10 +507,10 @@ def draw_page_one(pdf, data):
     # ---- hand-fill briefing blocks (no underscore fill, blank-label
     # rows exactly like VTKCM's own) ----
     briefing_rows = [
-        ("ATC CLEARANCE", 135.22, 485.46, operational.get("departureClearance")),
-        ("DEP ATIS", 98.66, 528.84, operational.get("departureAtis")),
-        ("ARR ATIS", 100.23, 572.23, operational.get("arrivalAtis")),
-        ("DEST ALTN ATIS", 131.82, 615.62, operational.get("destAltnAtis")),
+        ("ATC CLEARANCE", 135.22, 485.46 + _shift, operational.get("departureClearance")),
+        ("DEP ATIS", 98.66, 528.84 + _shift, operational.get("departureAtis")),
+        ("ARR ATIS", 100.23, 572.23 + _shift, operational.get("arrivalAtis")),
+        ("DEST ALTN ATIS", 131.82, 615.62 + _shift, operational.get("destAltnAtis")),
     ]
 
     for label, colon_x, y, entered in briefing_rows:
@@ -492,15 +529,15 @@ def draw_page_one(pdf, data):
     ]
 
     for label, key, label_x, rule_x in v_layout:
-        _text(pdf, label_x, 662.01, label)
-        _text(pdf, rule_x, 662.01, "_______________")
-        _text(pdf, rule_x + 6, 660.51, v_speeds.get(key))
+        _text(pdf, label_x, 662.01 + _shift, label)
+        _text(pdf, rule_x, 662.01 + _shift, "_______________")
+        _text(pdf, rule_x + 6, 660.51 + _shift, v_speeds.get(key))
 
     # VREF's own fill sits apart from the others - same quirk as VTVIK's
     # own last-V-speed row.
-    _text(pdf, 401.30, 662.01, "VREF:")
-    _text(pdf, 453.92, 663.51, "_______________")
-    _text(pdf, 459.92, 662.01, v_speeds.get("vref"))
+    _text(pdf, 401.30, 662.01 + _shift, "VREF:")
+    _text(pdf, 453.92, 663.51 + _shift, "_______________")
+    _text(pdf, 459.92, 662.01 + _shift, v_speeds.get("vref"))
 
     # ---- certification footer (no divider line on this reference) ----
     certification = [
@@ -510,34 +547,38 @@ def draw_page_one(pdf, data):
         "series F part 3.",
     ]
 
-    cert_y = 689.29
+    cert_y = 689.29 + _shift
     for cert_line in certification:
         _text_center(pdf, 297.6, cert_y, cert_line, size=SIZE_CERT)
         cert_y += 10.69
 
-    _text(pdf, 416.56, 757.80, "(PILOT/COPILOT SIGNATURE)")
+    _text(pdf, 416.56, 757.80 + _shift, "(PILOT/COPILOT SIGNATURE)")
 
 
 # --------------------------------------------------
 # NAVLOG TABLE (PAGES 2+)
 # --------------------------------------------------
-# 18 flat columns. The TIME group heads only the LEG column; the column
-# beside it, headed "ETE", carries the remaining-time figure.
+# 19 flat columns, measured off the operator's own reference. The TIME
+# group has three columns of its own - LEG, REM, ETE - not one: an
+# earlier version of this table folded "REM" into the "ETE" slot and
+# dropped the real ETE figure (htmlParser's cell(17), the "ete" key)
+# entirely, so every row's actual estimated-time-enroute value was never
+# drawn anywhere on the page.
 
 COLUMN_X = [
-    34.8, 116.5, 157.6, 181.1, 202.2, 230.7, 253.8, 292.3, 311.2, 332.3,
-    350.3, 371.8, 395.4, 422.9, 446.7, 472.8, 493.6, 517.8, 560.5,
+    34.8, 95.6, 139.4, 164.2, 186.5, 209.9, 234.3, 275.3, 295.0, 317.2,
+    335.8, 358.5, 383.4, 412.6, 437.5, 460.3, 485.3, 507.1, 531.6, 560.9,
 ]
 
 COLUMN_KEYS = [
     "waypoint", "airway", "heading", "course", "flightLevel", "windComponent",
     "windDirectionSpeed", "isa", "tas", "gs", "legDistance", "remainingDistance",
-    "fuelUsed", "fuelRemaining", "legTime", "remainingTime", "ata", "actualFuel",
+    "fuelUsed", "fuelRemaining", "legTime", "remainingTime", "ete", "ata", "actualFuel",
 ]
 
 COLUMN_LABELS = [
     "WAYPOINT", "AIRWAY", "HDG", "CRS", "ALT", "CMP", "DIR/SPD", "ISA", "TAS",
-    "GS", "LEG", "REM", "USED", "REM", "LEG", "ETE",
+    "GS", "LEG", "REM", "USED", "REM", "LEG", "REM", "ETE",
 ]
 
 # (label, first column index, last column index) for the shallow top row.
@@ -546,14 +587,21 @@ COLUMN_GROUPS = [
     ("SPD KT", 8, 9),
     ("DIST NM", 10, 11),
     ("FUEL LB", 12, 13),
-    ("TIME", 14, 14),
+    ("TIME", 14, 16),
 ]
 
-TABLE_TOP = 36.3
-HEADER_TOP_HEIGHT = 21.0
-HEADER_BOTTOM_HEIGHT = 30.9
-ROW_HEIGHT = 21.0
-ROW_TALL_HEIGHT = 30.9
+# Matches FRAME_TOP exactly - a gap here doubles the top border, since
+# the frame's own rect edge draws one line and the header's first hline
+# draws a second one just below it (the same bug vtkcm.py had).
+TABLE_TOP = FRAME_TOP
+# +1.9 vs. the reference-measured 23.1: TABLE_TOP dropped by that same
+# 1.9 (36.3 -> FRAME_TOP's 34.4) to kill the doubled border above, and
+# every offset measured from it below is bumped the same amount so the
+# already-verified absolute text/row positions don't move.
+HEADER_TOP_HEIGHT = 25.0
+HEADER_BOTTOM_HEIGHT = 33.0
+ROW_HEIGHT = 22.4
+ROW_TALL_HEIGHT = 33.5
 TABLE_BOTTOM_LIMIT = 780.0
 BANNER_HEIGHT = 45.6
 
@@ -565,24 +613,45 @@ def _draw_table_header(pdf, y):
     for line_y in (y, top_bottom, bottom_bottom):
         _hline(pdf, COLUMN_X[0], COLUMN_X[-1], line_y)
 
-    # Every boundary is ruled through both header rows on this template,
-    # including the ones inside a group's span.
+    # The top row only rules group boundaries - ruling every column
+    # boundary there too cut a stray divider straight through a group's
+    # own centred label (e.g. "WIND", "FUEL LB"). The row beneath rules
+    # every column.
+    group_edges = {COLUMN_X[0], COLUMN_X[-1]}
+    for label, start, end in COLUMN_GROUPS:
+        group_edges.add(COLUMN_X[start])
+        group_edges.add(COLUMN_X[end + 1])
+    for index, x in enumerate(COLUMN_X[:-1]):
+        inside_group = any(start < index <= end for _, start, end in COLUMN_GROUPS)
+        if not inside_group:
+            group_edges.add(x)
+
+    for x in sorted(group_edges):
+        _vline(pdf, x, y, top_bottom)
     for x in COLUMN_X:
-        _vline(pdf, x, y, bottom_bottom)
+        _vline(pdf, x, top_bottom, bottom_bottom)
 
     for label, start, end in COLUMN_GROUPS:
         center = (COLUMN_X[start] + COLUMN_X[end + 1]) / 2
-        _text_center(pdf, center, y + 13.4, label, size=SIZE_TABLE)
+        _text_center(pdf, center, y + 15.3, label, size=SIZE)
 
     for index, label in enumerate(COLUMN_LABELS):
+        # WAYPOINT is left-aligned against the column edge, same as the
+        # data rows below it (COLUMN_X[0] + 2.6) - the reference prints it
+        # flush left, not centered like every other header label.
+        if index == 0:
+            _text(pdf, COLUMN_X[0] + 2.6, top_bottom + 18.4, label, size=SIZE)
+            continue
         center = (COLUMN_X[index] + COLUMN_X[index + 1]) / 2
-        _text_center(pdf, center, top_bottom + 18.4, label, size=SIZE_TABLE)
+        _text_center(pdf, center, top_bottom + 18.4, label, size=SIZE)
 
-    for index, (line1, line2) in enumerate([("ETA", "ATA"), ("ACTUAL", "FUEL")]):
+    # The reference abbreviates this one to "ACT", not "ACTUAL" - confirmed
+    # off its own text run (3 characters: A, C, T).
+    for index, (line1, line2) in enumerate([("ETA", "ATA"), ("ACT", "FUEL")]):
         column = len(COLUMN_LABELS) + index
         center = (COLUMN_X[column] + COLUMN_X[column + 1]) / 2
-        _text_center(pdf, center, y + 34.5, line1, size=SIZE_TABLE)
-        _text_center(pdf, center, y + 44.3, line2, size=SIZE_TABLE)
+        _text_center(pdf, center, y + 37.9, line1, size=SIZE)
+        _text_center(pdf, center, y + 49.0, line2, size=SIZE)
 
     return bottom_bottom
 
@@ -592,7 +661,7 @@ def _waypoint_lines(row):
         part for part in
         [value(row.get("waypoint")), value(row.get("waypointDetail"))] if part
     )
-    return _wrap(waypoint, SIZE_TABLE, COLUMN_X[1] - COLUMN_X[0] - 5) or [""]
+    return _wrap(waypoint, SIZE, COLUMN_X[1] - COLUMN_X[0] - 5) or [""]
 
 
 def _row_height(row):
@@ -608,18 +677,18 @@ def _draw_row(pdf, row, y):
         _vline(pdf, x, y, y + height)
 
     if len(lines) <= 1:
-        _text(pdf, COLUMN_X[0] + 2.6, y + 13.4, lines[0], size=SIZE_TABLE)
+        _text(pdf, COLUMN_X[0] + 2.6, y + 13.4, lines[0], size=SIZE)
         value_baseline = y + 13.4
     else:
-        _text(pdf, COLUMN_X[0] + 2.6, y + 13.5, lines[0], size=SIZE_TABLE)
-        _text(pdf, COLUMN_X[0] + 2.6, y + 23.3, lines[1], size=SIZE_TABLE)
+        _text(pdf, COLUMN_X[0] + 2.6, y + 13.5, lines[0], size=SIZE)
+        _text(pdf, COLUMN_X[0] + 2.6, y + 25.4, lines[1], size=SIZE)
         value_baseline = y + 18.4
 
     for index, key in enumerate(COLUMN_KEYS):
         if index == 0:
             continue
         center = (COLUMN_X[index] + COLUMN_X[index + 1]) / 2
-        _text_center(pdf, center, value_baseline, value(row.get(key)), size=SIZE_TABLE)
+        _text_center(pdf, center, value_baseline, value(row.get(key)), size=SIZE)
 
     return y + height
 
@@ -636,7 +705,10 @@ def _draw_banner(pdf, left_text, right_text, y):
     _vline(pdf, FRAME_X1, y, bottom)
 
     _text(pdf, COLUMN_X[0] + 2.6, y + 26.1, left_text)
-    _text(pdf, 179.9, y + 26.1, right_text)
+    # VTHYR's DEP/DEST are lat/long coordinates, much wider than VTKCM's
+    # ICAO codes - this fixed x (carried over from vtkcm.py's own tuning)
+    # sat underneath left_text's own tail end and the two ran together.
+    _text(pdf, 203.9, y + 26.1, right_text)
 
     return bottom
 
@@ -650,6 +722,19 @@ def _start_blank_page(pdf, data):
 
 def _start_table_page(pdf, data):
     return _draw_table_header(pdf, _start_blank_page(pdf, data))
+
+
+def _drop_origin_row(rows):
+    """An alternate plan starts where the main route ended, so ForeFlight
+    repeats that airport as the block's own origin row - no heading, no
+    course, just the taxi fuel. The operator's sheet leaves it out: its
+    alternate blocks open on the first navaid, while the main block does
+    keep its own origin row. Same fix vtkcm.py already carries - this
+    page is otherwise identical to that one and had simply never picked
+    it up."""
+    if rows and not value(rows[0].get("heading")).strip(" -"):
+        return rows[1:]
+    return rows
 
 
 def draw_navlog_pages(pdf, data):
@@ -679,7 +764,7 @@ def draw_navlog_pages(pdf, data):
         route_text = value(routes.get(route_key)).replace("Route", "").strip()
         banner_right = f"Route {route_text}" if route_text else ""
 
-        blocks.append((banner_left, banner_right, rows))
+        blocks.append((banner_left, banner_right, _drop_origin_row(rows)))
 
     for banner_left, banner_right, rows in blocks:
         if banner_left is not None:
@@ -700,14 +785,14 @@ def draw_navlog_pages(pdf, data):
 # --------------------------------------------------
 
 AIRPORT_COLUMN_X = [
-    34.8, 90.2, 142.2, 189.1, 245.7, 330.0, 366.7, 415.8, 461.8, 509.2, 560.5,
+    34.8, 79.5, 175.8, 222.2, 262.7, 346.9, 383.1, 422.7, 468.4, 514.4, 560.5,
 ]
 
 AIRPORT_HEADERS = [
     "", "Airport", "ETA", "ATIS", "TWR/CTAF", "CLR", "GND", "ELEV", "LONGEST RWY", "",
 ]
 
-AIRPORT_ROW_HEIGHT = 21.0
+AIRPORT_ROW_HEIGHT = 22.4
 
 
 def draw_airport_info(pdf, data, y):
@@ -741,10 +826,10 @@ def draw_airport_info(pdf, data, y):
             if not value(cell):
                 continue
             if header:
-                _text(pdf, AIRPORT_COLUMN_X[index] + 2.6, y + 13.4, cell, size=SIZE_TABLE)
+                _text(pdf, AIRPORT_COLUMN_X[index] + 2.6, y + 13.4, cell, size=SIZE)
             else:
                 center = (AIRPORT_COLUMN_X[index] + AIRPORT_COLUMN_X[index + 1]) / 2
-                _text_center(pdf, center, y + 13.5, cell, size=SIZE_TABLE)
+                _text_center(pdf, center, y + 13.5, cell, size=SIZE)
 
         y = bottom
 

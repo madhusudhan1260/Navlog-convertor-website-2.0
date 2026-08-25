@@ -29,12 +29,33 @@ def clean_route(route_text):
     return rt.strip()
 
 
+def detect_weight_unit(raw_text):
+    """Return "KG" or "LBS" found at the end of a fuel/weight figure.
+
+    ForeFlight prints these in whichever unit the aircraft profile is
+    configured for - kg for some fleets (e.g. VTHYR's EC45s), lbs for
+    most others - so the template needs to know which one a given
+    upload actually used rather than assuming one. Returns "" when
+    neither is present so callers can fall back to a template default.
+    """
+    match = re.search(r"\b(kg|lbs)\s*$", clean(raw_text), re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
 def strip_unit(value, unit):
-    """Strip trailing units like lbs, NM, ft etc."""
+    """Strip trailing units like lbs, kg, NM, ft etc.
+
+    All four callers pass "lbs", but ForeFlight prints fuel/weight
+    figures in whichever unit the aircraft profile is configured for
+    (kg for VTHYR's EC45 fleet, lbs elsewhere) - so a fixed "lbs" match
+    left every kg-denominated figure as an unparseable "625 kg" string,
+    which silently failed every downstream float()-based calculation.
+    Strip either unit regardless of which one the caller named.
+    """
     v = clean(value)
     if not v:
         return ""
-    regex = re.compile(r"\s*" + re.escape(unit) + r"\s*$", re.IGNORECASE)
+    regex = re.compile(r"\s*(?:" + re.escape(unit) + r"|lbs|kg)\s*$", re.IGNORECASE)
     return clean(regex.sub("", v))
 
 
@@ -90,7 +111,8 @@ def empty_result():
             "payload": "",
             "zfw": "",
             "tow": "",
-            "elw": ""
+            "elw": "",
+            "weightUnit": ""
         },
         "route": "",
         "waypoints": [],
@@ -266,6 +288,10 @@ def parse_performance_summary(soup, result):
         # differently to ForeFlight's own figure.
         elif label == "landing fuel" and not result["fuelWeights"]["landingFuel"]:
             result["fuelWeights"]["landingFuel"] = strip_unit(val, "lbs")
+            if not result["fuelWeights"]["weightUnit"]:
+                detected_unit = detect_weight_unit(val)
+                if detected_unit:
+                    result["fuelWeights"]["weightUnit"] = detected_unit
 
 
 # =====================================================
@@ -292,7 +318,13 @@ def parse_fuel_weights(soup, result):
             span.decompose()
 
         label = clean(label_clone.get_text()).lower()
-        value = strip_unit(clean(value_td.get_text()), "lbs")
+        raw_value = clean(value_td.get_text())
+        value = strip_unit(raw_value, "lbs")
+
+        if not result["fuelWeights"]["weightUnit"]:
+            detected_unit = detect_weight_unit(raw_value)
+            if detected_unit:
+                result["fuelWeights"]["weightUnit"] = detected_unit
 
         if label == "block fuel":
             result["fuelWeights"]["blockFuel"] = value

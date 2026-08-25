@@ -22,6 +22,9 @@ AIRCRAFT_FUEL_LIMITS = {
     "VTBBN": {"maxTrip": "3235"},
     "VTKCM": {"maxTrip": "3453"},
     "VTKCM2": {"maxTrip": "3453"},
+    # VTHYR (EC45): taken from the operator's own original reference OPS
+    # FPL for this tail, same as the other rows above.
+    "VTHYR": {"maxTrip": "723"},
 }
 
 
@@ -49,6 +52,16 @@ VTAHP_CONTINGENCY_FUEL_MINIMUM = 60
 # VTCSP's own CONTINGENCY fuel is floored at 105 lbs the same way - the 5%
 # figure only replaces it once it climbs past 105.
 VTCSP_CONTINGENCY_FUEL_MINIMUM = 105
+
+# VTKCM's own CONTINGENCY fuel is floored at 50 lbs - confirmed against two
+# unrelated flights (869 lb trip -> 50, not the natural 5% of 43; 290 lb
+# trip -> 50, not the natural 5% of 14).
+VTKCM_CONTINGENCY_FUEL_MINIMUM = 50
+
+# VTKCM's ADDITIONAL row defaults to a flat 0:15 / 150 lbs unless the
+# operator types their own figure.
+VTKCM_ADDITIONAL_FUEL_DEFAULT = 150
+VTKCM_ADDITIONAL_TIME_DEFAULT = "0:15"
 
 # Contingency time on those templates is a tenth of trip time, but never
 # less than five minutes - see the contingency block below.
@@ -330,6 +343,16 @@ def expand_head_count(value_in, weight_lbs, weight_kg=None, unit="lbs"):
     per_head = weight_kg if (unit == "kg" and weight_kg is not None) else weight_lbs
 
     return f"{count} - {round(count * per_head)}"
+
+
+def _trailing_amount(text):
+    """Pulls the weight back out of expand_head_count's "<count> - <weight>"
+    display string (e.g. "1 - 165" -> "165"). Passes anything without a
+    dash straight through, so a hand-typed plain figure still works."""
+    text = str(text or "").strip()
+    if "-" in text:
+        return text.rsplit("-", 1)[-1].strip()
+    return text
 
 
 def parse_fuel_flow_per_hour(text):
@@ -774,6 +797,38 @@ def convert_with_claude(master_json, template="MLOVE"):
                 _enroute_minutes + APPROACH_LANDING_MINUTES
             )
 
+    # FIX: FUEL used to bump TRIP's fuel figure with zero effect on TRIP's
+    # own time, as if the extra fuel burned in no time at all. Per the
+    # operator, it should read as genuine extra flying at the trip's own
+    # burn rate (base trip fuel / base trip time, both taken before this
+    # top-up so the rate itself isn't distorted by it) - added on top of
+    # TRIP's time above. _fuel_topup_time_minutes is reused below to push
+    # the same delta through the navlog table's own REM fuel/time columns,
+    # so the per-waypoint figures (and APPROCH AND LAND, which reads the
+    # last one) move together with page 1 instead of a top-up only ever
+    # showing on the summary line while the table underneath stayed as
+    # ForeFlight's original, unmodified numbers.
+    _fuel_topup_fuel_amount = None
+    try:
+        _fuel_topup_fuel_amount = float(_user_fuel)
+    except (TypeError, ValueError):
+        pass
+
+    _fuel_topup_time_minutes = None
+    if _fuel_topup_fuel_amount:
+        _base_trip_time_minutes = hhmm_to_minutes(page1["fuel"]["tripTime"])
+        try:
+            _base_trip_fuel_num = float(_base_trip_fuel)
+        except (TypeError, ValueError):
+            _base_trip_fuel_num = None
+        if _base_trip_fuel_num and _base_trip_time_minutes:
+            _trip_rate_per_min = _base_trip_fuel_num / _base_trip_time_minutes
+            if _trip_rate_per_min:
+                _fuel_topup_time_minutes = _fuel_topup_fuel_amount / _trip_rate_per_min
+                page1["fuel"]["tripTime"] = minutes_to_hhmm(
+                    _base_trip_time_minutes + _fuel_topup_time_minutes
+                )
+
     page1["fuel"]["tripDistance"] = (
         str(summary.get("distance")) if summary.get("distance") else ""
     )
@@ -857,6 +912,9 @@ def convert_with_claude(master_json, template="MLOVE"):
 
         if template == "VTCSP" and _computed_contingency_fuel is not None:
             _computed_contingency_fuel = max(_computed_contingency_fuel, VTCSP_CONTINGENCY_FUEL_MINIMUM)
+
+        if template in ("VTKCM", "VTKCM2") and _computed_contingency_fuel is not None:
+            _computed_contingency_fuel = max(_computed_contingency_fuel, VTKCM_CONTINGENCY_FUEL_MINIMUM)
 
         # On these templates the contingency TIME does not track the 5%
         # fuel figure - it is 10% of trip time, floored at five minutes.
@@ -1178,19 +1236,20 @@ def convert_with_claude(master_json, template="MLOVE"):
     # ------------------------------------------------------
     # ADDITIONAL / DISCRETIONARY (VTKCM)
     # ------------------------------------------------------
-    # VTKCM's plan block carries an operator-entered ADDITIONAL row
-    # between FINAL RESERVE and ALTN1, and renames XTRA to DISCRETIONARY -
-    # which is the extra fuel less that additional figure. REQUIRED (and
-    # so MIN. TRIP FUEL) deliberately excludes ADDITIONAL, exactly as the
-    # reference's own 1492 lb figure does.
+    # VTKCM's plan block carries an ADDITIONAL row between FINAL RESERVE
+    # and ALTN1, and renames XTRA to DISCRETIONARY - which is the extra
+    # fuel less that additional figure. REQUIRED (and so MIN. TRIP FUEL)
+    # deliberately excludes ADDITIONAL, exactly as the reference's own
+    # 1492 lb figure does. Defaults to 0:15 / 150 lbs when the operator
+    # hasn't typed a figure of their own.
     page1["fuel"]["additional"] = first(
         user_input.get("additionalFuel"),
         user_input.get("additional"),
-        ""
+        str(VTKCM_ADDITIONAL_FUEL_DEFAULT) if template in ("VTKCM", "VTKCM2") else ""
     )
     page1["fuel"]["additionalTime"] = first(
         user_input.get("additionalTime"),
-        ""
+        VTKCM_ADDITIONAL_TIME_DEFAULT if template in ("VTKCM", "VTKCM2") else ""
     )
 
     page1["fuel"]["discretionary"] = first(
@@ -1219,6 +1278,15 @@ def convert_with_claude(master_json, template="MLOVE"):
 
     page1["fuel"]["ramp"] = fw.get("blockFuel")
     page1["fuel"]["rampEndurance"] = minutes_to_hhmm(_endurance_minutes)
+
+    # FIX: VTHYR's whole fleet has always reported in KG, so vthyr.py used
+    # to hardcode that suffix on every figure. Some tails on this fleet can
+    # be configured to export in LBS instead, so this carries whichever
+    # unit the upload actually used (detected off the raw "625 kg"/"1380
+    # lbs" text before strip_unit removed it) through to the renderer.
+    # Defaults to KG - this template's own historical default - only when
+    # the source document didn't carry a detectable unit at all.
+    page1["fuel"]["weightUnit"] = (fw.get("weightUnit") or "KG").strip().upper()
 
     # ForeFlight's own "Flight Fuel" (taxi + trip, block to block). VTCSP
     # prints this as its BLOCK FUEL figure, distinct from the ramp fuel
@@ -1260,9 +1328,11 @@ def convert_with_claude(master_json, template="MLOVE"):
         _pax_value = _pax_breakdown_total(user_input)
         _cc_value = _pax_cabin_crew_total(user_input)
 
-    # PAX / CC print as "<count> - <weight>" on every format now, in
-    # whichever of lbs/kg the operator picked (paxUnit) - not just VTBBD.
+    # PAX / CC only print as "<count> - <weight>" on VTBBD and TEST - every
+    # other format prints the plain typed count, exactly as before the
+    # lbs/kg toggle existed.
     _pax_cc_unit = str(user_input.get("paxUnit") or "lbs").strip().lower()
+    _expand_pax_cc = template in ("VTBBD", "TEST")
 
     # FIX #4: PAX Fallback added
     if _pax_value is None:
@@ -1271,23 +1341,36 @@ def convert_with_claude(master_json, template="MLOVE"):
             summary.get("soulsOnBoard"),
             summary.get("pax")
         )
-        _pax_value = expand_head_count(
-            _pax_value, PAX_UNIT_WEIGHT, PAX_UNIT_WEIGHT_KG, _pax_cc_unit
-        )
+        if _expand_pax_cc:
+            _pax_value = expand_head_count(
+                _pax_value, PAX_UNIT_WEIGHT, PAX_UNIT_WEIGHT_KG, _pax_cc_unit
+            )
 
     if _cc_value is None:
         _cc_value = first(
             user_input.get("ccWeight"),
             user_input.get("cabinCrewCount")
         )
-        _cc_value = expand_head_count(
-            _cc_value, CC_UNIT_WEIGHT, CC_UNIT_WEIGHT_KG, _pax_cc_unit
-        )
+        if _expand_pax_cc:
+            _cc_value = expand_head_count(
+                _cc_value, CC_UNIT_WEIGHT, CC_UNIT_WEIGHT_KG, _pax_cc_unit
+            )
 
     page1["weight"]["pax"] = _pax_value
     page1["weight"]["cc"] = _cc_value
 
     page1["weight"]["load"] = fw.get("payload")
+
+    # CARGO (VTBBD/TEST only, alongside the PAX/CC "<count> - <weight>"
+    # expansion above): LOAD less (PAX weight + CC weight) - i.e. how much
+    # of LOAD is left over once passenger/crew weight is accounted for.
+    if _expand_pax_cc:
+        _pax_weight_only = _trailing_amount(_pax_value)
+        _cc_weight_only = _trailing_amount(_cc_value)
+        page1["weight"]["cargo"] = subtract_if_complete(
+            page1["weight"]["load"],
+            sum_if_complete(_pax_weight_only, _cc_weight_only)
+        )
 
     page1["weight"]["zeroFuelWeight"] = fw.get("zfw")
 
@@ -1376,6 +1459,34 @@ def convert_with_claude(master_json, template="MLOVE"):
         alt_summary = object_(alt.get("summary"))
         alt_fw_local = object_(alt.get("fuelWeights"))
 
+        # FIX: this used the colon-format ete ("0:50", already
+        # converted by htmlParser for use elsewhere in the template) -
+        # but the expected PDF's ALT1/ALT2 summary block at the bottom
+        # of page 1 uses ForeFlight's own "0h50m"-style duration,
+        # uppercased ("0H50M"). Re-derive that format here rather than
+        # reusing the colon-converted value.
+        # VTJOE's ALT block quotes the diversion navlog's own last
+        # cumulative ETE (0H28M on its reference) rather than the
+        # summary figure the ALT1 fuel row uses (0:27) - the two can
+        # differ by a rounding minute, and this block sits above the
+        # very table the crew reads that figure off.
+        _alt_ete_minutes = hhmm_to_minutes(first(
+            last_value(alt.get("waypoints"), "ete") if template == "VTJOE" else "",
+            alt_summary.get("ete", ""),
+        ))
+        _alt_fuel = alt_fw_local.get("flightFuel", "")
+
+        # FIX: FUEL 1 / FUEL 1 TIME already top up the FUEL section's own
+        # ALT1 row (page1.fuel.alternate/alternateTime), but this separate
+        # ALT1/ALT2 summary block at the bottom of page 1 kept printing
+        # ForeFlight's original, un-topped-up ETE/FUEL regardless - so the
+        # two blocks disagreed once an operator entered either figure.
+        # Only ALT1 has a top-up field; ALT2 has none, so it's untouched.
+        if name == "ALT1":
+            _alt_fuel = sum_if_complete(_alt_fuel, _user_fuel1)
+            if _user_fuel1_time is not None and _alt_ete_minutes is not None:
+                _alt_ete_minutes += _user_fuel1_time
+
         return {
             "name": name,
             "airport": alt.get("destination"),
@@ -1386,22 +1497,8 @@ def convert_with_claude(master_json, template="MLOVE"):
                 if alt_summary.get("distance")
                 else ""
             ),
-            # FIX: this used the colon-format ete ("0:50", already
-            # converted by htmlParser for use elsewhere in the template) -
-            # but the expected PDF's ALT1/ALT2 summary block at the bottom
-            # of page 1 uses ForeFlight's own "0h50m"-style duration,
-            # uppercased ("0H50M"). Re-derive that format here rather than
-            # reusing the colon-converted value.
-            # VTJOE's ALT block quotes the diversion navlog's own last
-            # cumulative ETE (0H28M on its reference) rather than the
-            # summary figure the ALT1 fuel row uses (0:27) - the two can
-            # differ by a rounding minute, and this block sits above the
-            # very table the crew reads that figure off.
-            "ete": minutes_to_hm_upper(hhmm_to_minutes(first(
-                last_value(alt.get("waypoints"), "ete") if template == "VTJOE" else "",
-                alt_summary.get("ete", ""),
-            ))),
-            "fuel": alt_fw_local.get("flightFuel", "")
+            "ete": minutes_to_hm_upper(_alt_ete_minutes),
+            "fuel": _alt_fuel
         }
 
     data["page1"]["alternates"] = list(
@@ -1470,6 +1567,27 @@ def convert_with_claude(master_json, template="MLOVE"):
         map_waypoint_row(row)
         for row in array(main.get("waypoints"))
     ]
+
+    # Carries the FUEL top-up (see _fuel_topup_fuel_amount/_time_minutes
+    # above) through every row: less fuel remaining from here to the
+    # destination since more of it is now spoken for, and more time
+    # remaining since that extra burn is extra flying. USED and LEG stay
+    # untouched - they're what's already happened, not what's projected.
+    if _fuel_topup_fuel_amount or _fuel_topup_time_minutes:
+        for _row in data["mainNavlog"]:
+            if _fuel_topup_fuel_amount:
+                _rem_fuel = None
+                try:
+                    _rem_fuel = float(str(_row.get("fuelRemaining") or "").replace(",", ""))
+                except (TypeError, ValueError):
+                    _rem_fuel = None
+                if _rem_fuel is not None:
+                    _row["fuelRemaining"] = str(round(_rem_fuel - _fuel_topup_fuel_amount))
+            if _fuel_topup_time_minutes:
+                for _time_key in ("remainingTime", "ete"):
+                    _rem_minutes = hhmm_to_minutes(_row.get(_time_key))
+                    if _rem_minutes is not None:
+                        _row[_time_key] = minutes_to_hhmm(_rem_minutes + _fuel_topup_time_minutes)
 
     data["alternate1Navlog"] = [
         map_waypoint_row(row)

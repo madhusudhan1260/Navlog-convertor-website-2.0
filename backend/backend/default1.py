@@ -512,7 +512,10 @@ def draw_page_one(pdf, data):
     level_y = 409.52 + shift
     for index, row in enumerate(level_calcs[:5]):
         fl_disp = _space_fl(row.get("fl"))
-        if fl_disp and not fl_disp.upper().startswith("FL"):
+        # Below the transition altitude a level-calc row is a raw altitude
+        # ("3000 ft"), not a flight level - only bare numbers get an "FL "
+        # prefix added, not values that already carry their own unit.
+        if fl_disp and not fl_disp.upper().startswith("FL") and "ft" not in fl_disp.lower():
             fl_disp = f"FL {fl_disp}"
 
         _text_center(pdf, LEVEL_FL_X, level_y, fl_disp)
@@ -721,13 +724,26 @@ ROW_TALL_HEIGHT = 33.52
 TABLE_BOTTOM_LIMIT = 780.0
 BANNER_HEIGHT = 45.64
 
+# AIRPORT INFO's own rows (22.39pt, no tall 2-line variant) don't need
+# the navlog table's full safety margin - using TABLE_BOTTOM_LIMIT here
+# was pushing the whole section onto a fresh, nearly-empty page whenever
+# it fell just short (as little as ~11pt), leaving both the tail of the
+# navlog page and the new page mostly blank.
+AIRPORT_INFO_BOTTOM_LIMIT = FRAME_BOTTOM - 10.0
+
 
 def _draw_table_header(pdf, y, COLUMN_X):
     top_bottom = y + HEADER_TOP_HEIGHT
     bottom_bottom = top_bottom + HEADER_BOTTOM_HEIGHT
 
+    # Wide content can push COLUMN_X[-1] past the frame's own right edge
+    # (see TABLE_MIN_RIGHT above) - column widths stay exactly as
+    # calibrated, but the ruled line itself stops at the frame rather than
+    # running on past it, which is what created a short stray-looking
+    # sliver to the right of ACT/FUEL on wide-content sheets.
+    right_edge = min(COLUMN_X[-1], FRAME_X1)
     for line_y in (y, top_bottom, bottom_bottom):
-        _hline(pdf, COLUMN_X[0], COLUMN_X[-1], line_y)
+        _hline(pdf, COLUMN_X[0], right_edge, line_y)
 
     # The top row rules only the group boundaries; the row beneath rules
     # every column.
@@ -791,7 +807,9 @@ def _draw_row(pdf, row, y, COLUMN_X):
     lines = _waypoint_lines(row)
     height = _row_height(row)
 
-    _hline(pdf, COLUMN_X[0], COLUMN_X[-1], y + height)
+    # See _draw_table_header's own right_edge note - the ruled line stops
+    # at the frame even when wide content pushes the column past it.
+    _hline(pdf, COLUMN_X[0], min(COLUMN_X[-1], FRAME_X1), y + height)
     for x in COLUMN_X[:-1]:
         _vline(pdf, x, y, y + height)
 
@@ -932,7 +950,7 @@ def draw_airport_info(pdf, data, y):
 
 
     needed = 53.9 + AIRPORT_ROW_HEIGHT * (len(airports) + 1)
-    if y + needed > TABLE_BOTTOM_LIMIT:
+    if y + needed > AIRPORT_INFO_BOTTOM_LIMIT:
         y = _start_blank_page(pdf, data)
 
     y += 42.66
