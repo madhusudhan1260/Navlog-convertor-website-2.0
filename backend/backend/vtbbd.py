@@ -4,7 +4,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-from claude import APPROACH_LANDING_FUEL, APPROACH_LANDING_MINUTES
+from claude import APPROACH_LANDING_MINUTES
 from common import (
     OUTPUT_DIRECTORY,
     PAGE,
@@ -172,12 +172,6 @@ def draw_fuel_section(pdf, data):
             find_value(fuel, "tripDistance", "trip_distance"),
         ),
         (
-            "MAX TRIP FUEL",
-            fuel.get("maxTripFuel"),
-            "",
-            "",
-        ),
-        (
             "CONTINGENCY",
             fuel.get("contingency"),
             find_value(fuel, "contingencyTime", "contingency_time"),
@@ -226,7 +220,7 @@ def draw_fuel_section(pdf, data):
             "",
         ),
     ]
-    rows_y = [219, 232, 245, 258, 272, 285, 298, 311, 325, 338, 349]
+    rows_y = [219, 232, 245, 259, 272, 285, 298, 312, 325, 336]
 
     for row, y in zip(fuel_rows, rows_y):
         write(pdf, row[0], 74, y, 92, {"size": 8.5, "lineBreak": False})
@@ -245,7 +239,7 @@ def draw_weight_section(pdf, data):
         ("PAX", weight.get("pax")),
         ("CC", weight.get("cc")),
         ("CARGO", weight.get("cargo")),
-        ("LOAD", weight.get("load")),
+        ("TOT.LOAD", weight.get("load")),
         ("ZFW", weight.get("zeroFuelWeight")),
         ("T/O FUEL", weight.get("takeoffFuel")),
         ("TOW", weight.get("takeoffWeight")),
@@ -262,8 +256,11 @@ def draw_weight_section(pdf, data):
 
 def draw_misc_section(pdf, data):
     misc = data.get("page1", {}).get("misc", {})
-    section_heading(pdf, "MISC", 72, 360, 220)
+    section_heading(pdf, "MISC", 72, 347, 220)
 
+    # The intermediate-power-segment ("INTERMEDIATE") and emergency/OEI
+    # trailing-segment normalisation both happen once, in claude.py, so
+    # every format's own PLN PROFILE line agrees - not just this one's.
     pln_profile = value(misc.get("plannedProfile")).upper()
 
     flight_rules = find_value(misc, "flightRules", "flight_rules", "rules").upper()
@@ -273,19 +270,19 @@ def draw_misc_section(pdf, data):
     # Divider lines sit ~5pt clear of the cap-height of the label below
     # them. Text drawn at baseline Y occupies roughly Y-6 upwards, so a
     # rule any closer than that cuts straight through the lettering.
-    labelled_value(pdf, "PLN PROFILE", pln_profile, 74, 373, 90, 470)
-    line(pdf, 70, 386, 542, 386, 0.7)
+    labelled_value(pdf, "PLN PROFILE", pln_profile, 74, 360, 90, 470)
+    line(pdf, 70, 373, 542, 373, 0.7)
 
     raw_route = value(misc.get("atcRoute")).upper()
     clean_route = raw_route.replace("ROUTE", "").strip() if raw_route.startswith("ROUTE") else raw_route
-    labelled_value(pdf, "ATC ROUTE", clean_route, 72, 397, 56, 470)
-    line(pdf, 70, 412, 542, 412, 0.4)
+    labelled_value(pdf, "ATC ROUTE", clean_route, 72, 384, 56, 470)
+    line(pdf, 70, 399, 542, 399, 0.4)
 
 
 def draw_operational_section(pdf, data):
     operational = data.get("page1", {}).get("operational", {})
 
-    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 72, 424, 81, 455)
+    labelled_value(pdf, "DEPARTURE ATIS", operational.get("departureAtis"), 72, 411, 81, 455)
 
     tofl = operational.get("tofl")
     v_speeds = operational.get("vSpeeds") or operational.get("v1v2v2vt")
@@ -296,16 +293,16 @@ def draw_operational_section(pdf, data):
         f"V1/VR/V2/VT {('_' * 13) if not v_speeds else value(v_speeds)}   "
         f"T/O WT {('_' * 16) if not to_wt else value(to_wt)}",
         72,
-        455,
+        442,
         480,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 70, 466, 542, 466, 0.4)
+    line(pdf, 70, 453, 542, 453, 0.4)
 
-    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 72, 477, 78, 455)
-    line(pdf, 70, 514, 542, 514, 0.4)
+    labelled_value(pdf, "DEP CLEARANCE", operational.get("departureClearance"), 72, 464, 78, 455)
+    line(pdf, 70, 501, 542, 501, 0.4)
 
-    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 72, 525, 68, 455)
+    labelled_value(pdf, "ARRIVAL ATIS", operational.get("arrivalAtis"), 72, 512, 68, 455)
 
     vref_vac = operational.get("vrefVac")
     flaps = operational.get("flaps")
@@ -314,11 +311,11 @@ def draw_operational_section(pdf, data):
         f"LDG DATA: VREF/VAC {('_' * 12) if not vref_vac else value(vref_vac)}   "
         f"FLAPS{('_' * 18) if not flaps else value(flaps)}",
         72,
-        550,
+        537,
         480,
         {"size": 8.5, "lineBreak": False},
     )
-    line(pdf, 70, 560, 542, 560, 0.4)
+    line(pdf, 70, 547, 542, 547, 0.4)
 
     operation_columns = [
         [("CHOCKS ON", operational.get("chocksOn")), ("CHOCKS OFF", operational.get("chocksOff")), ("BLOCK TIME", operational.get("blockTime"))],
@@ -330,37 +327,37 @@ def draw_operational_section(pdf, data):
 
     for x, column in zip(columns_x, operation_columns):
         for row_index, row in enumerate(column):
-            y = 571 + row_index * 13.3
+            y = 558 + row_index * 13.3
             write(pdf, row[0], x, y, 62, {"size": 8.5, "lineBreak": False})
             line(pdf, x + 58, y + 2, x + 106, y + 2)
             if row[1]:
                 write(pdf, row[1], x + 61, y, 44, {"size": 8.5, "lineBreak": False})
 
-    write(pdf, "RVSM CHECKS", 72, 626, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "TIME (UTC)", 158, 626, 80, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT1", 230, 626, 60, {"size": 8.5, "lineBreak": False})
-    write(pdf, "ALT2", 296, 626, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "RVSM CHECKS", 72, 613, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "TIME (UTC)", 158, 613, 80, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT1", 230, 613, 60, {"size": 8.5, "lineBreak": False})
+    write(pdf, "ALT2", 296, 613, 60, {"size": 8.5, "lineBreak": False})
 
     for index, label_text in enumerate(["GROUND", "PRE-RVSM CHECK", "LEVEL OFF"]):
-        y = 639 + index * 13.2
+        y = 626 + index * 13.2
         write(pdf, label_text, 72, y, 90, {"size": 8.5, "lineBreak": False})
         line(pdf, 158, y + 2, 212, y + 2)
         line(pdf, 230, y + 2, 284, y + 2)
         line(pdf, 297, y + 2, 351, y + 2)
 
     # VTBBD-only: boxed ALT ATIS note, to the right of the RVSM block.
-    box(pdf, 360, 611, 194, 57)
-    write(pdf, "ALT ATIS :", 366, 628, 100, {"size": 8.5, "lineBreak": False})
+    box(pdf, 360, 598, 194, 57)
+    write(pdf, "ALT ATIS :", 366, 615, 100, {"size": 8.5, "lineBreak": False})
     alt_atis = operational.get("altAtis")
     if alt_atis:
-        write(pdf, alt_atis, 366, 643, 180, {"size": 8})
+        write(pdf, alt_atis, 366, 630, 180, {"size": 8})
 
 
 def draw_alternates(pdf, data):
     alternates = data.get("page1", {}).get("alternates", [])
 
     for index, alternate in enumerate(alternates[:2]):
-        y = 685 + index * 27
+        y = 672 + index * 27
         raw_route = value(alternate.get("route")).replace("Route", "").strip()
 
         alt_label = alternate.get("name", f"ALT{index + 1}")
@@ -398,27 +395,44 @@ def draw_alternates(pdf, data):
 # --------------------------------------------------
 
 
-# Approach & landing allowance. Derived from VTBBD's own reference
-# document, where it holds on BOTH legs: the APPROCH AND LAND row prints
-# the final waypoint's REMAINING fuel less exactly 220 lbs, over a fixed
-# 0:06 - main leg 5549 -> 5329, alternate leg 4150 -> 3930. It's an
-# aircraft constant (~2200 lbs/hr at approach power), not something the
-# ForeFlight export carries. The same pair is added onto page 1's TRIP
-# figure, so it is owned by claude.py and imported here rather than
-# being spelled out twice.
+# The time half of the approach & landing allowance stays a fixed 0:06
+# on both legs, per VTBBD's own reference document. It's owned by
+# claude.py (the same figure is added onto page 1's TRIP time) and
+# imported here rather than being spelled out twice. The fuel half used
+# to be a matching fixed 220 lb constant, but is now driven by whatever
+# the operator enters in FUEL (the main leg only) instead - see
+# approach_and_land_fuel().
 APPROACH_LANDING_TIME = f"0:{APPROACH_LANDING_MINUTES:02d}"
 
 
-def approach_and_land_fuel(rows):
+def approach_and_land_fuel(rows, fuel_topup=""):
     """Fuel remaining once the approach and landing at the end of a leg
-    is flown: the last waypoint's REM figure minus the allowance."""
+    is flown.
+
+    The last waypoint's own REM figure, minus whatever the operator
+    enters in FUEL (the TRIP top-up). The navlog table's own rows -
+    including this last one, i.e. "DCT" - always show ForeFlight's
+    original figure unchanged, so the subtraction has to happen here
+    rather than being read pre-applied off the row. Nothing entered in
+    FUEL means nothing gets subtracted."""
+    last_remaining = None
     for row in reversed(rows or []):
         remaining = value(row.get("fuelRemaining")).replace(",", "").strip()
         try:
-            return str(round(float(remaining) - APPROACH_LANDING_FUEL))
+            last_remaining = float(remaining)
         except (TypeError, ValueError):
             continue
-    return ""
+        break
+
+    if last_remaining is None:
+        return ""
+
+    try:
+        topup = float(str(fuel_topup).replace(",", "").strip())
+    except (TypeError, ValueError):
+        topup = 0
+
+    return str(round(last_remaining - topup))
 
 
 def _drop_origin_row(rows):
@@ -432,6 +446,54 @@ def _drop_origin_row(rows):
     if rows and not value(rows[0].get("heading")).strip(" -"):
         return rows[1:]
     return rows
+
+
+def _max_tas_at_toc_tod(rows):
+    """ForeFlight's own per-leg TAS climbs gradually out of -TOC- and eases
+    off into -TOD-, so the whole cruise segment prints a handful of
+    slightly different figures (442, 442, 441, 441...) either side of the
+    aircraft's one real cruise TAS - and -TOC-/-TOD- themselves can carry
+    a blended or spuriously high figure of their own, not the cruise
+    speed either. The operator wants every row from -TOC- through -TOD-,
+    both boundaries included, overwritten with a single uniform value:
+    the highest TAS among the rows outside that span (the genuine cruise
+    figure), so -TOC-/-TOD-'s own numbers can't feed back into what
+    everything in between gets set to."""
+    rows = list(rows or [])
+
+    span = [False] * len(rows)
+    inside = False
+    for index, row in enumerate(rows):
+        waypoint = value(row.get("waypoint")).strip(" -").upper()
+        if waypoint == "TOC":
+            inside = True
+            span[index] = True
+        elif waypoint == "TOD":
+            span[index] = True
+            inside = False
+        elif inside:
+            span[index] = True
+
+    tas_values = []
+    for index, row in enumerate(rows):
+        if span[index]:
+            continue
+        try:
+            tas_values.append(float(value(row.get("tas"))))
+        except (TypeError, ValueError):
+            continue
+
+    if not tas_values:
+        return rows
+
+    max_tas = str(round(max(tas_values)))
+    updated = []
+    for index, row in enumerate(rows):
+        if span[index]:
+            row = dict(row)
+            row["tas"] = max_tas
+        updated.append(row)
+    return updated
 
 
 def draw_summary_row(pdf, label, fuel_val, time_val, y):
@@ -485,16 +547,29 @@ def draw_pages_two_and_three(pdf, data):
         return y
 
     y = new_navlog_page()
-    y = draw_all_rows(data.get("mainNavlog", []), y)
+    y = draw_all_rows(_max_tas_at_toc_tod(data.get("mainNavlog", [])), y)
 
     # Fuel state after the arrival at the destination: the main leg's
-    # final REM figure less the approach & landing allowance. The MISSED
-    # APPROACH row below repeats it - in the reference both rows carry
-    # the same figure, since a go-around starts from that same state.
-    approach_fuel = approach_and_land_fuel(data.get("mainNavlog", []))
+    # final REM figure (the "DCT" row, left unmodified) less whatever the
+    # operator enters in FUEL. MISSED APPROACH below is a second reading
+    # of that same DCT figure, less FUEL 1 (the alternate's own top-up)
+    # instead - the two rows share their starting point but not their
+    # top-up, since a go-around still burns the alternate's own reserve.
+    page1_fuel = data.get("page1", {}).get("fuel", {})
+    fuel_topup = page1_fuel.get("fuelTopUp", "")
+    fuel1_topup = page1_fuel.get("fuel1TopUp", "")
+    approach_fuel = approach_and_land_fuel(data.get("mainNavlog", []), fuel_topup)
+    missed_approach_fuel = approach_and_land_fuel(data.get("mainNavlog", []), fuel1_topup)
+
+    # The time column mirrors the fuel column's field pairing: normally a
+    # fixed 0:06, but replaced with whatever the operator types into
+    # FUEL TIME / FUEL 1 TIME instead when they type something.
+    approach_time = page1_fuel.get("fuelTimeInput") or APPROACH_LANDING_TIME
+    missed_approach_time = page1_fuel.get("fuel1TimeInput") or APPROACH_LANDING_TIME
+
     if y + 20 > NAVLOG_ROWS_MAX_Y:
         y = new_navlog_page()
-    y = draw_summary_row(pdf, "APPROCH AND LAND", approach_fuel, APPROACH_LANDING_TIME, y)
+    y = draw_summary_row(pdf, "APPROCH AND LAND", approach_fuel, approach_time, y)
 
     alternate_name = data.get("page1", {}).get("flightInfo", {}).get("alternate1", "")
     alternate_route = data.get("routes", {}).get("alternate1Route", "")
@@ -509,18 +584,20 @@ def draw_pages_two_and_three(pdf, data):
 
     if y + 20 > NAVLOG_ROWS_MAX_Y:
         y = new_navlog_page()
-    y = draw_summary_row(pdf, "MISSED APPROACH", approach_fuel, APPROACH_LANDING_TIME, y)
+    y = draw_summary_row(pdf, "MISSED APPROACH", missed_approach_fuel, missed_approach_time, y)
 
-    y = draw_all_rows(_drop_origin_row(data.get("alternate1Navlog", [])), y)
+    y = draw_all_rows(_max_tas_at_toc_tod(_drop_origin_row(data.get("alternate1Navlog", []))), y)
 
-    # Same again for the diversion leg: alternate 1's final REM figure
-    # less the approach & landing allowance.
-    alt1_approach_fuel = approach_and_land_fuel(data.get("alternate1Navlog", []))
+    # Same again for the diversion leg: alternate 1's own final REM
+    # figure (its own "DCT" row, left unmodified) less FUEL - the same
+    # trip top-up (and FUEL TIME) the main leg's APPROCH AND LAND uses,
+    # not FUEL 1.
+    alt1_approach_fuel = approach_and_land_fuel(data.get("alternate1Navlog", []), fuel_topup)
     if y + 20 > NAVLOG_ROWS_MAX_Y:
         y = new_navlog_page()
-    y = draw_summary_row(pdf, "APPROCH AND LAND", alt1_approach_fuel, APPROACH_LANDING_TIME, y)
+    y = draw_summary_row(pdf, "APPROCH AND LAND", alt1_approach_fuel, approach_time, y)
 
-    y = draw_all_rows(_drop_origin_row(data.get("alternate2Navlog", [])), y)
+    y = draw_all_rows(_max_tas_at_toc_tod(_drop_origin_row(data.get("alternate2Navlog", []))), y)
 
     # AIRPORT INFO needs a fresh page of its own if what's left on this
     # one can't fit its heading, column header row, every airport row,

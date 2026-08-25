@@ -634,12 +634,38 @@ def convert_with_claude(master_json, template="MLOVE"):
     # so the max is the cruise figure). Best-effort only.
     waypoints = array(main.get("waypoints"))
 
+    # Every leg from -TOC- to -TOD- (both included) is still ramping up to
+    # or easing off cruise speed, so none of them - not just the two
+    # boundary rows - is a trustworthy "cruise TAS" reading on its own.
+    # VTBBD's own navlog table already excludes that whole span, not just
+    # -TOC-/-TOD- themselves, when it works out the figure to stamp across
+    # it; this page-1 TAS has to exclude the same span or the two numbers
+    # disagree (a genuine plateau leg outside the span reads lower than
+    # some transitional leg still inside it).
+    def _outside_toc_tod_span(rows):
+        span = [False] * len(rows)
+        inside = False
+        for index, wpt in enumerate(rows):
+            name = str(wpt.get("waypoint", "")).strip(" -").upper()
+            if name == "TOC":
+                inside = True
+                span[index] = True
+            elif name == "TOD":
+                span[index] = True
+                inside = False
+            elif inside:
+                span[index] = True
+        return [wpt for index, wpt in enumerate(rows) if not span[index]]
+
     # VTJOE quotes the highest TAS anywhere in the plan, alternates
     # included - its reference prints 501, which is reached on the
-    # diversion leg rather than on the main route.
-    tas_sources = list(waypoints)
+    # diversion leg rather than on the main route. Each route's own span
+    # is excluded independently so a climb on one leg can't be paired
+    # with a descent on another.
+    tas_sources = _outside_toc_tod_span(waypoints)
     if template == "VTJOE":
-        tas_sources += array(alt1.get("waypoints")) + array(alt2.get("waypoints"))
+        tas_sources += _outside_toc_tod_span(array(alt1.get("waypoints")))
+        tas_sources += _outside_toc_tod_span(array(alt2.get("waypoints")))
 
     max_tas = 0
     for wpt in tas_sources:
@@ -802,12 +828,13 @@ def convert_with_claude(master_json, template="MLOVE"):
     # operator, it should read as genuine extra flying at the trip's own
     # burn rate (base trip fuel / base trip time, both taken before this
     # top-up so the rate itself isn't distorted by it) - added on top of
-    # TRIP's time above. _fuel_topup_time_minutes is reused below to push
-    # the same delta through the navlog table's own REM fuel/time columns,
-    # so the per-waypoint figures (and APPROCH AND LAND, which reads the
-    # last one) move together with page 1 instead of a top-up only ever
-    # showing on the summary line while the table underneath stayed as
-    # ForeFlight's original, unmodified numbers.
+    # TRIP's time above.
+    #
+    # _fuel_topup_fuel_amount is also exposed via page1["fuel"]["fuelTopUp"]
+    # below so vtbbd.py can factor it into APPROCH AND LAND on its own -
+    # the navlog table's own rows (including the destination/DCT row) are
+    # left showing ForeFlight's original, unmodified REM figures; only that
+    # one summary line is meant to move with the top-up.
     _fuel_topup_fuel_amount = None
     try:
         _fuel_topup_fuel_amount = float(_user_fuel)
@@ -828,6 +855,20 @@ def convert_with_claude(master_json, template="MLOVE"):
                 page1["fuel"]["tripTime"] = minutes_to_hhmm(
                     _base_trip_time_minutes + _fuel_topup_time_minutes
                 )
+
+    # Raw FUEL top-up, for formats (VTBBD) whose APPROCH AND LAND figure
+    # needs to subtract it directly from an otherwise-untouched navlog row.
+    page1["fuel"]["fuelTopUp"] = str(_fuel_topup_fuel_amount) if _fuel_topup_fuel_amount else ""
+
+    # Raw FUEL TIME / FUEL 1 TIME entries, for VTBBD's APPROCH AND LAND /
+    # MISSED APPROACH time columns - normally a fixed 0:06, but replaced
+    # with whatever the operator types here instead.
+    page1["fuel"]["fuelTimeInput"] = (
+        minutes_to_hhmm(_user_fuel_time) if _user_fuel_time is not None else ""
+    )
+    page1["fuel"]["fuel1TimeInput"] = (
+        minutes_to_hhmm(_user_fuel1_time) if _user_fuel1_time is not None else ""
+    )
 
     page1["fuel"]["tripDistance"] = (
         str(summary.get("distance")) if summary.get("distance") else ""
@@ -956,6 +997,10 @@ def convert_with_claude(master_json, template="MLOVE"):
         ),
         _user_fuel1
     )
+
+    # Raw FUEL 1 top-up, for VTBBD's MISSED APPROACH figure (see fuelTopUp
+    # above for the matching FUEL/APPROCH AND LAND pairing).
+    page1["fuel"]["fuel1TopUp"] = str(_user_fuel1) if _user_fuel1 not in (None, "") else ""
 
     # FIX: pdfGenerator's ALT1 row also has a 4th (distance) column, which
     # was never populated - Alternate 1's own "Distance" summary figure
@@ -1401,6 +1446,33 @@ def convert_with_claude(master_json, template="MLOVE"):
             f"{flight_rules} {page1['misc']['plannedProfile']}".strip()
         )
 
+    # FIX: the profile string is "<segment1> - <segment2> @ <alt> -
+    # <segment3>". <segment2> - whatever power setting the aircraft holds
+    # between its first climb speed and reaching cruise altitude - prints
+    # as a literal Mach/KIAS figure ("MACH 0.76", "250 KIAS/M0.77") that
+    # varies flight to flight, but the operator always wants it read as
+    # "INTERMEDIATE" regardless of its exact wording. Matches the first
+    # " - <anything> @ " span non-greedily so segment1 (which never
+    # contains "@") is left alone.
+    page1["misc"]["plannedProfile"] = re.sub(
+        r"-\s*[^-]+?\s*@",
+        "- INTERMEDIATE @",
+        page1["misc"]["plannedProfile"],
+        count=1,
+    )
+
+    # <segment3>, when present, is normally a real descent speed schedule
+    # ("M0.78/300/250 KIAS") and stays. But some exports carry an
+    # emergency/one-engine-inoperative contingency figure here instead
+    # ("EMERGENCY OEI MMO/VMO") that has no place on an operational
+    # navlog - strip that specific trailing segment, not any other.
+    page1["misc"]["plannedProfile"] = re.sub(
+        r"\s*-\s*EMERGENCY.*$",
+        "",
+        page1["misc"]["plannedProfile"],
+        flags=re.IGNORECASE,
+    )
+
     # FIX: this used to fall back to user_input["shortFPL"] first, but that
     # is the SAME field the full ICAO flight-plan text below reads from
     # ("ATC Short Flight Plan" -> icaoFlightPlan/fullFPL/icaoFPL/shortFPL
@@ -1476,14 +1548,18 @@ def convert_with_claude(master_json, template="MLOVE"):
         ))
         _alt_fuel = alt_fw_local.get("flightFuel", "")
 
-        # FIX: FUEL 1 / FUEL 1 TIME already top up the FUEL section's own
-        # ALT1 row (page1.fuel.alternate/alternateTime), but this separate
-        # ALT1/ALT2 summary block at the bottom of page 1 kept printing
-        # ForeFlight's original, un-topped-up ETE/FUEL regardless - so the
-        # two blocks disagreed once an operator entered either figure.
-        # Only ALT1 has a top-up field; ALT2 has none, so it's untouched.
+        # FIX: this used ForeFlight's raw Flight Fuel (taxi + trip
+        # combined), while the FUEL section's own ALT1 row above it
+        # (page1.fuel.alternate) subtracts ALT1's own taxi fuel first -
+        # the two blocks printed different numbers for the same leg
+        # (e.g. 1925 here against 1525 there, exactly ALT1's 400 lb taxi
+        # allowance apart). Reusing page1.fuel.alternate directly - which
+        # already carries both the taxi subtraction and any FUEL 1 top-up
+        # - makes this block agree with it exactly. Only ALT1 has a
+        # FUEL 1 top-up field; ALT2 has none, so its own figure (still
+        # ForeFlight's raw Flight Fuel) is untouched.
         if name == "ALT1":
-            _alt_fuel = sum_if_complete(_alt_fuel, _user_fuel1)
+            _alt_fuel = page1["fuel"]["alternate"]
             if _user_fuel1_time is not None and _alt_ete_minutes is not None:
                 _alt_ete_minutes += _user_fuel1_time
 
@@ -1568,26 +1644,13 @@ def convert_with_claude(master_json, template="MLOVE"):
         for row in array(main.get("waypoints"))
     ]
 
-    # Carries the FUEL top-up (see _fuel_topup_fuel_amount/_time_minutes
-    # above) through every row: less fuel remaining from here to the
-    # destination since more of it is now spoken for, and more time
-    # remaining since that extra burn is extra flying. USED and LEG stay
-    # untouched - they're what's already happened, not what's projected.
-    if _fuel_topup_fuel_amount or _fuel_topup_time_minutes:
-        for _row in data["mainNavlog"]:
-            if _fuel_topup_fuel_amount:
-                _rem_fuel = None
-                try:
-                    _rem_fuel = float(str(_row.get("fuelRemaining") or "").replace(",", ""))
-                except (TypeError, ValueError):
-                    _rem_fuel = None
-                if _rem_fuel is not None:
-                    _row["fuelRemaining"] = str(round(_rem_fuel - _fuel_topup_fuel_amount))
-            if _fuel_topup_time_minutes:
-                for _time_key in ("remainingTime", "ete"):
-                    _rem_minutes = hhmm_to_minutes(_row.get(_time_key))
-                    if _rem_minutes is not None:
-                        _row[_time_key] = minutes_to_hhmm(_rem_minutes + _fuel_topup_time_minutes)
+    # FIX: this used to push the FUEL top-up into every row's own REM/
+    # remaining-time figures, so the navlog table itself no longer
+    # matched ForeFlight's original numbers. Per the operator, the table
+    # (including the destination's own DCT row) should always show
+    # ForeFlight's figures unchanged - only APPROCH AND LAND, computed
+    # separately in vtbbd.py from the untouched last row, is meant to
+    # move with the top-up.
 
     data["alternate1Navlog"] = [
         map_waypoint_row(row)
