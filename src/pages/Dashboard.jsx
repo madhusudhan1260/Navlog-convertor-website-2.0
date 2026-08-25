@@ -249,7 +249,7 @@ const FIELD_USAGE = {
   flightLevel: ALL_FORMATS,
 
   paxWeight: ALL_FORMATS,
-  maxTripFuel: ALL_FORMATS,
+  maxTripFuel: except("VTBBD"),
   endurance: ALL_FORMATS,
   contingencyFuel: ALL_FORMATS,
   contingencyTime: ALL_FORMATS,
@@ -346,10 +346,10 @@ const FORM_SECTIONS = [
       {
         cols: 2,
         fields: [
-          { name: "fuel", label: "Fuel", badge: "+ TRIP", placeholder: "lbs added to TRIP" },
-          { name: "fuel1", label: "Fuel 1", badge: "+ ALT1", placeholder: "lbs added to ALT1" },
-          { name: "fuelTime", label: "Fuel Time", badge: "+ TAXI", placeholder: "0:10" },
-          { name: "fuel1Time", label: "Fuel 1 Time", badge: "+ ALT1", placeholder: "0:05" },
+          { name: "fuel", label: "Approach And Land", badge: "+ TRIP", placeholder: "lbs added to TRIP" },
+          { name: "fuel1", label: "Missed Approach", badge: "+ ALT1", placeholder: "lbs added to ALT1" },
+          { name: "fuelTime", label: "Approach And Land Time", badge: "+ TAXI", placeholder: "0:10" },
+          { name: "fuel1Time", label: "Missed Approach Time", badge: "+ ALT1", placeholder: "0:05" },
         ],
       },
     ],

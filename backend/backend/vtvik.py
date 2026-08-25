@@ -306,7 +306,7 @@ def draw_page_one(pdf, data):
     ]
     weight_rows = [
         ("BASIC WT", weight.get("basicOperatingWeight")),
-        ("LOAD", weight.get("load")),
+        ("TOT.LOAD", weight.get("load")),
         ("ZERO FUEL", weight.get("zeroFuelWeight")),
         ("T.OFF WT", weight.get("takeoffWeight")),
         ("LAND WT", weight.get("estimatedLandingWeight")),

@@ -247,7 +247,7 @@ def draw_weight_section(pdf, data):
     weight_rows = [
         ("BOW", weight.get("basicOperatingWeight")),
         ("PAX", weight.get("pax")),
-        ("LOAD", weight.get("load")),
+        ("TOT.LOAD", weight.get("load")),
         ("ZFW", weight.get("zeroFuelWeight")),
         ("T/O FUEL", weight.get("takeoffFuel")),
         ("TOW", weight.get("takeoffWeight")),
