@@ -423,6 +423,18 @@ function Dashboard() {
 
   });
 
+  // A pasted ForeFlight link is the alternative to picking a file - the
+  // backend only manages to fetch it when the link resolves without
+  // requiring sign-in (a public share link), so this is a fallback
+  // alongside the upload, not a replacement for it.
+  const [urls, setUrls] = useState({
+
+    mainUrl: "",
+    alternate1Url: "",
+    alternate2Url: ""
+
+  });
+
   const [form, setForm] = useState({
 
     callSign: "",
@@ -538,14 +550,28 @@ function Dashboard() {
 
   }
 
+  function updateUrl(event) {
+
+    const { name, value } = event.target;
+
+    setUrls(previous => ({
+
+      ...previous,
+
+      [name]: value
+
+    }));
+
+  }
+
 
   // ================= PROCESS =================
 
   async function processNavlog() {
 
-    if (!files.mainFile) {
+    if (!files.mainFile && !urls.mainUrl.trim()) {
 
-      alert("Please select Main Route HTML File");
+      alert("Please select a Main Route HTML file or paste a link to one");
 
       return;
 
@@ -571,16 +597,26 @@ function Dashboard() {
 
       const formData = new FormData();
 
-      formData.append(
-        "mainFile",
-        files.mainFile
-      );
+      // A file always wins over a pasted link when both are given -
+      // matches the backend's own resolve_route() precedence.
+      if (files.mainFile) {
+        formData.append("mainFile", files.mainFile);
+      } else {
+        formData.append("mainUrl", urls.mainUrl.trim());
+      }
 
       if (files.alternate1File) {
 
         formData.append(
           "alternate1File",
           files.alternate1File
+        );
+
+      } else if (urls.alternate1Url.trim()) {
+
+        formData.append(
+          "alternate1Url",
+          urls.alternate1Url.trim()
         );
 
       }
@@ -590,6 +626,13 @@ function Dashboard() {
         formData.append(
           "alternate2File",
           files.alternate2File
+        );
+
+      } else if (urls.alternate2Url.trim()) {
+
+        formData.append(
+          "alternate2Url",
+          urls.alternate2Url.trim()
         );
 
       }
@@ -727,42 +770,60 @@ function Dashboard() {
 
   // ================= FILE PICKER =================
 
-  function FilePicker({ name, title, required }) {
+  function FilePicker({ name, urlName, title, required }) {
 
     const chosen = files[name];
+    const url = urls[urlName];
 
     return (
 
-      <label className={`file-field ${chosen ? "is-set" : ""}`}>
+      <div className="file-field-group">
 
-        <div className="file-row">
+        <label className={`file-field ${chosen ? "is-set" : ""}`}>
 
-          <div className="file-icon">{chosen ? <CheckIcon width={17} height={17} /> : <UploadIcon />}</div>
+          <div className="file-row">
 
-          <div className="file-text">
-            <strong>{title}</strong>
-            <span>{chosen ? chosen.name : "Click to select a ForeFlight .html export"}</span>
+            <div className="file-icon">{chosen ? <CheckIcon width={17} height={17} /> : <UploadIcon />}</div>
+
+            <div className="file-text">
+              <strong>{title}</strong>
+              <span>{chosen ? chosen.name : "Click to select a ForeFlight .html export"}</span>
+            </div>
+
+            <div className={`file-badge ${!chosen && !url && required ? "req" : ""}`}>
+              {chosen ? "Loaded" : required && !url ? "Required" : "Optional"}
+            </div>
+
           </div>
 
-          <div className={`file-badge ${!chosen && required ? "req" : ""}`}>
-            {chosen ? "Loaded" : required ? "Required" : "Optional"}
-          </div>
+          <input
+            type="file"
+            accept=".html,.htm"
+            name={name}
+            onChange={updateFile}
+          />
 
+        </label>
+
+        <div className="file-url-row">
+          <span>or paste a ForeFlight navlog link</span>
+          <input
+            type="url"
+            name={urlName}
+            placeholder="https://..."
+            value={url}
+            disabled={!!chosen}
+            onChange={updateUrl}
+          />
         </div>
 
-        <input
-          type="file"
-          accept=".html,.htm"
-          name={name}
-          onChange={updateFile}
-        />
-
-      </label>
+      </div>
 
     );
 
   }
 
+  const mainRouteReady = !!files.mainFile || urls.mainUrl.trim() !== "";
   const crewDone = form.pilotName !== "" || form.callSign !== "";
   const fuelDone = form.endurance !== "" || form.contingencyFuel !== "";
   const fplDone = form.icaoFlightPlan !== "";
@@ -1230,9 +1291,9 @@ function Dashboard() {
 
                 <div className="grid1">
 
-                  <FilePicker name="mainFile" title="Main Route" required />
-                  <FilePicker name="alternate1File" title="Alternate 1" />
-                  <FilePicker name="alternate2File" title="Alternate 2" />
+                  <FilePicker name="mainFile" urlName="mainUrl" title="Main Route" required />
+                  <FilePicker name="alternate1File" urlName="alternate1Url" title="Alternate 1" />
+                  <FilePicker name="alternate2File" urlName="alternate2Url" title="Alternate 2" />
 
                 </div>
 
@@ -1390,8 +1451,8 @@ function Dashboard() {
                     : (
                       <div className="checklist">
 
-                        <div className={`check-row ${files.mainFile ? "done" : ""}`}>
-                          <i>{files.mainFile ? "✓" : "1"}</i>
+                        <div className={`check-row ${mainRouteReady ? "done" : ""}`}>
+                          <i>{mainRouteReady ? "✓" : "1"}</i>
                           Main route HTML
                         </div>
 
@@ -1433,7 +1494,7 @@ function Dashboard() {
 
                 <div className="action-note">
                   {
-                    files.mainFile
+                    mainRouteReady
                       ? `Ready — ${formatLabel(form.selectedFormat)} format`
                       : "Main route HTML required"
                   }
