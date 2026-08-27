@@ -12,6 +12,8 @@ try:
 except ImportError:
     pass
 
+from urllib.parse import urlparse, parse_qs
+
 import requests
 
 from flask import (
@@ -175,12 +177,29 @@ class RouteFetchError(Exception):
     pass
 
 
+def _resolve_doc_link(url):
+    """The link ForeFlight's own share/print UI hands out points at
+    plan.foreflight.com/flightdata/api/trips/view-trip-document/ - a page
+    that needs the visitor signed in to render, since it's a ForeFlight
+    account page. But the navlog HTML it displays isn't hosted there: the
+    page itself just reads a `doc_link` query parameter pointing at a
+    CloudFront URL and fetches THAT. Serving the shared document from
+    CloudFront rather than from the account page is exactly what makes it
+    reachable without a session - so fetching doc_link directly, instead
+    of the wrapper page, is what lets this work without ForeFlight ever
+    being logged in server-side."""
+    doc_link = parse_qs(urlparse(url).query).get("doc_link", [None])[0]
+    return doc_link or url
+
+
 def fetch_route_html(label, url):
     """Best-effort server-side fetch of a pasted ForeFlight link. Works
     only for links that resolve to the navlog HTML without requiring the
-    requester to be signed in (e.g. a public share link) - ForeFlight's
-    own login session lives in the operator's browser, not here, so
-    anything behind a sign-in wall can't be reached this way."""
+    requester to be signed in (e.g. a public share link, or a
+    view-trip-document link's own doc_link target) - ForeFlight's own
+    login session lives in the operator's browser, not here, so anything
+    still behind a sign-in wall after that can't be reached this way."""
+    url = _resolve_doc_link(url)
     try:
         response = requests.get(
             url,
