@@ -4,3 +4,4 @@ reportlab
 beautifulsoup4
 gunicorn
 python-dotenv
+requests

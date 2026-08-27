@@ -12,6 +12,8 @@ try:
 except ImportError:
     pass
 
+import requests
+
 from flask import (
     Flask,
     request,
@@ -161,6 +163,86 @@ def empty_route():
 
 
 # =====================================================
+# ROUTE SOURCE (uploaded file, or a pasted ForeFlight link)
+# =====================================================
+
+class RouteFetchError(Exception):
+    """A pasted link couldn't be turned into a usable navlog. Always
+    carries a message telling the operator to fall back to uploading the
+    .html file instead - the one path that's certain to work, since a
+    server-side request has no access to the operator's own ForeFlight
+    session and can't get past a sign-in wall a link may sit behind."""
+    pass
+
+
+def fetch_route_html(label, url):
+    """Best-effort server-side fetch of a pasted ForeFlight link. Works
+    only for links that resolve to the navlog HTML without requiring the
+    requester to be signed in (e.g. a public share link) - ForeFlight's
+    own login session lives in the operator's browser, not here, so
+    anything behind a sign-in wall can't be reached this way."""
+    try:
+        response = requests.get(
+            url,
+            timeout=15,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0 Safari/537.36"
+                )
+            },
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        reason = (
+            f"HTTP {error.response.status_code}"
+            if isinstance(error, requests.HTTPError) and error.response is not None
+            else type(error).__name__
+        )
+        raise RouteFetchError(
+            f"Could not fetch the {label} navlog from that link ({reason}). "
+            "ForeFlight may require you to be signed in, which a server "
+            "request can't provide - please upload the .html file instead."
+        ) from error
+
+    html = response.text
+    parsed = parse_html(html)
+
+    if not parsed.get("waypoints"):
+        raise RouteFetchError(
+            f"That link didn't return a {label} navlog - it may have "
+            "redirected to a ForeFlight sign-in page. Please upload the "
+            ".html file instead."
+        )
+
+    return parsed
+
+
+def resolve_route(label, file_key, url_key, required=False):
+    """Either the uploaded file (existing path) or a pasted link (new
+    path) supplies a route - the file always wins if both are given."""
+    file = request.files.get(file_key)
+    if file and file.filename:
+        path = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
+        file.save(path)
+        with open(path, "r", encoding="utf8") as f:
+            html = f.read()
+        return parse_html(html)
+
+    url = (request.form.get(url_key) or "").strip()
+    if url:
+        return fetch_route_html(label, url)
+
+    if required:
+        raise RouteFetchError(
+            f"{label} is missing - upload a file or paste a link."
+        )
+
+    return empty_route()
+
+
+# =====================================================
 # CONVERT
 # =====================================================
 
@@ -172,19 +254,6 @@ def convert():
         print(
             "\n========== NEW CONVERSION ==========\n"
         )
-
-        # -------------------------------------
-
-        if "mainFile" not in request.files:
-
-            return jsonify({
-
-                "success": False,
-
-                "message":
-                    "Main HTML file missing."
-
-            }), 400
 
         # -------------------------------------
         # USER INPUT
@@ -207,116 +276,24 @@ def convert():
         print(f"📄 Using PDF template: {template}")
 
         # -------------------------------------
-        # MAIN ROUTE
+        # ROUTES (each is an uploaded file or a pasted link)
         # -------------------------------------
 
-        main_file = request.files["mainFile"]
-
-        main_path = os.path.join(
-
-            UPLOAD_FOLDER,
-
-            secure_filename(
-                main_file.filename
+        try:
+            main_route = resolve_route(
+                "Main Route", "mainFile", "mainUrl", required=True
             )
-
-        )
-
-        main_file.save(main_path)
-
-        with open(
-
-            main_path,
-
-            "r",
-
-            encoding="utf8"
-
-        ) as f:
-
-            main_html = f.read()
-
-        main_route = parse_html(
-
-            main_html
-
-        )
-
-        # -------------------------------------
-        # ALT 1
-        # -------------------------------------
-
-        alternate1 = empty_route()
-
-        if "alternate1File" in request.files:
-
-            file = request.files[
-                "alternate1File"
-            ]
-
-            path = os.path.join(
-
-                UPLOAD_FOLDER,
-
-                secure_filename(
-                    file.filename
-                )
-
+            alternate1 = resolve_route(
+                "Alternate 1", "alternate1File", "alternate1Url"
             )
-
-            file.save(path)
-
-            with open(
-
-                path,
-
-                "r",
-
-                encoding="utf8"
-
-            ) as f:
-
-                html = f.read()
-
-            alternate1 = parse_html(html)
-
-        # -------------------------------------
-        # ALT 2
-        # -------------------------------------
-
-        alternate2 = empty_route()
-
-        if "alternate2File" in request.files:
-
-            file = request.files[
-                "alternate2File"
-            ]
-
-            path = os.path.join(
-
-                UPLOAD_FOLDER,
-
-                secure_filename(
-                    file.filename
-                )
-
+            alternate2 = resolve_route(
+                "Alternate 2", "alternate2File", "alternate2Url"
             )
-
-            file.save(path)
-
-            with open(
-
-                path,
-
-                "r",
-
-                encoding="utf8"
-
-            ) as f:
-
-                html = f.read()
-
-            alternate2 = parse_html(html)
+        except RouteFetchError as error:
+            return jsonify({
+                "success": False,
+                "message": str(error),
+            }), 422
 
         # -------------------------------------
         # MASTER JSON
