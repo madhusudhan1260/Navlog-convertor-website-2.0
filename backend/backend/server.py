@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import unquote
 
 import requests
 
@@ -187,9 +187,22 @@ def _resolve_doc_link(url):
     CloudFront rather than from the account page is exactly what makes it
     reachable without a session - so fetching doc_link directly, instead
     of the wrapper page, is what lets this work without ForeFlight ever
-    being logged in server-side."""
-    doc_link = parse_qs(urlparse(url).query).get("doc_link", [None])[0]
-    return doc_link or url
+    being logged in server-side.
+
+    doc_link's own value is a signed CloudFront URL with its own
+    Expires/Signature/Key-Pair-Id query params, appended without
+    percent-encoding their & separators - so a normal query-string parser
+    (parse_qs) splits on those too and silently truncates the signature
+    off the end, leaving a broken URL. Taking the raw substring after
+    "doc_link=" through to the end keeps it intact instead."""
+    marker = "doc_link="
+    index = url.find(marker)
+    if index == -1:
+        return url
+
+    raw = url[index + len(marker):]
+    decoded = unquote(raw)
+    return decoded if decoded.startswith(("http://", "https://")) else raw
 
 
 def fetch_route_html(label, url):
