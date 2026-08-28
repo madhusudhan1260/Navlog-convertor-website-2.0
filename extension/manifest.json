@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "EFLIGHT AI - ForeFlight Bridge",
+  "version": "1.0",
+  "description": "Lets the EFLIGHT AI Navlog Converter fetch a pasted ForeFlight link using your already-logged-in ForeFlight session, so you don't have to save and upload the file yourself.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAolN757CoJtx4HCCiS2ItuPrVsBpL4Irvn1iNn/BSOWQt90cYhRhGUQgZts63dPy0rbibf0xi4vtgPJknE7wsghagRhtjSfQblUrIKd1VpNJq/KS/VtO4EucCZkPkfVNwAgdHt/aRmc8EDU+Z5k8nsROQDTWKLA4dZsVRIRXzhyrgqp4eFiV7wXgu45ku0rruwRyxtmZC/oGhPKuyxlMk8kJlbAY4BBlIqF7Rute9foE2R2rCeYEG4mA5u18i5owazQHriPgMiR1Pxg1CgNkt6/1DUrmtvwEQ2A8+02Cuwfe+BIAmAthL8tSS3U9c9eDTSbp7Q+JfFjiVLe/yMUyL/wIDAQAB",
+  "host_permissions": [
+    "https://plan.foreflight.com/*",
+    "https://cloudfront.foreflight.com/*",
+    "https://*.cloudfront.net/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:5173/*",
+      "http://localhost/*",
+      "http://127.0.0.1:5173/*"
+    ]
+  }
+}
