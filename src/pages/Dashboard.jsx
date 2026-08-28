@@ -3,6 +3,7 @@ import { useNavigate, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import { PlaneIcon, UploadIcon, CheckIcon, DownloadIcon } from "../components/Icons";
 import { API_URL } from "../api";
+import { fetchNavlogViaBridge } from "../foreflightBridge";
 
 // Mirrors claude.py's PAX_CATEGORY_WEIGHTS - shown here only as a live
 // preview before the operator submits; the backend is the source of truth
@@ -598,44 +599,36 @@ function Dashboard() {
       const formData = new FormData();
 
       // A file always wins over a pasted link when both are given -
-      // matches the backend's own resolve_route() precedence.
-      if (files.mainFile) {
-        formData.append("mainFile", files.mainFile);
-      } else {
-        formData.append("mainUrl", urls.mainUrl.trim());
+      // matches the backend's own resolve_route() precedence. For a
+      // link with no file, try the ForeFlight Bridge extension first
+      // (see src/foreflightBridge.js) - it can fetch account-gated
+      // links using the operator's real ForeFlight session, something
+      // the backend can never do on its own. Its result is uploaded
+      // exactly like a chosen file, reusing the same proven path. If
+      // the extension isn't installed or the fetch fails, fall back to
+      // sending the raw link to the backend, which still handles public
+      // links that don't need a session at all.
+      async function appendRoute(fileKey, file, urlKey, url) {
+        if (file) {
+          formData.append(fileKey, file);
+          return;
+        }
+
+        const trimmedUrl = url.trim();
+        if (!trimmedUrl) return;
+
+        try {
+          const html = await fetchNavlogViaBridge(trimmedUrl);
+          formData.append(fileKey, new Blob([html], { type: "text/html" }), "navlog.html");
+        } catch (bridgeError) {
+          console.warn("[ForeFlight Bridge] falling back to server-side fetch:", bridgeError);
+          formData.append(urlKey, trimmedUrl);
+        }
       }
 
-      if (files.alternate1File) {
-
-        formData.append(
-          "alternate1File",
-          files.alternate1File
-        );
-
-      } else if (urls.alternate1Url.trim()) {
-
-        formData.append(
-          "alternate1Url",
-          urls.alternate1Url.trim()
-        );
-
-      }
-
-      if (files.alternate2File) {
-
-        formData.append(
-          "alternate2File",
-          files.alternate2File
-        );
-
-      } else if (urls.alternate2Url.trim()) {
-
-        formData.append(
-          "alternate2Url",
-          urls.alternate2Url.trim()
-        );
-
-      }
+      await appendRoute("mainFile", files.mainFile, "mainUrl", urls.mainUrl);
+      await appendRoute("alternate1File", files.alternate1File, "alternate1Url", urls.alternate1Url);
+      await appendRoute("alternate2File", files.alternate2File, "alternate2Url", urls.alternate2Url);
 
       formData.append(
 
