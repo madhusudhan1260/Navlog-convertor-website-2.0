@@ -24,6 +24,10 @@ dist-ssr
 *.sw?
 backend/backend/.env
 
+# ForeFlight session state (cookies/localStorage) - a live credential,
+# never source. See backend/backend/foreflight_login.py.
+backend/backend/foreflight_auth.json
+
 # Python
 __pycache__/
 *.pyc

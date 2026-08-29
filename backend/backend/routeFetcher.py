@@ -16,6 +16,7 @@ from flask import request
 from werkzeug.utils import secure_filename
 
 from htmlParser import parse_html
+from playwrightFetcher import fetch_via_playwright, is_configured as playwright_configured
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -79,50 +80,71 @@ def _resolve_doc_link(url):
     return decoded if decoded.startswith(("http://", "https://")) else raw
 
 
+def _plain_fetch(url):
+    """Fast path: a bare GET, no browser. Works for links that don't
+    need a ForeFlight session at all (public share links)."""
+    response = requests.get(
+        url,
+        timeout=15,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            )
+        },
+    )
+    response.raise_for_status()
+    return response.text
+
+
 def fetch_route_html(label, url):
-    """Best-effort server-side fetch of a pasted ForeFlight link. Works
-    only for links that resolve to the navlog HTML without requiring the
-    requester to be signed in (e.g. a public share link, or a
-    view-trip-document link's own doc_link target) - ForeFlight's own
-    login session lives in the operator's browser, not here, so anything
-    still behind a sign-in wall after that can't be reached this way."""
-    url = _resolve_doc_link(url)
+    """Server-side fetch of a pasted ForeFlight link. Tries a plain,
+    fast, browser-less GET first - that's all a public share link
+    needs. If that comes back without a real navlog (e.g. redirected to
+    a sign-in page) and a ForeFlight session has been saved (see
+    foreflight_login.py), falls back to fetching it through headless
+    Chromium carrying that session - the one way to reach a link that's
+    gated behind the operator's own ForeFlight account. Without a saved
+    session, that fallback isn't available and the plain fetch's result
+    is what's reported."""
+    resolved = _resolve_doc_link(url)
+
+    plain_error = None
     try:
-        response = requests.get(
-            url,
-            timeout=15,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0 Safari/537.36"
-                )
-            },
-        )
-        response.raise_for_status()
+        html = _plain_fetch(resolved)
+        parsed = parse_html(html)
+        if parsed.get("waypoints"):
+            return parsed
     except requests.RequestException as error:
+        plain_error = error
+
+    if playwright_configured():
+        try:
+            html = fetch_via_playwright(url)
+            parsed = parse_html(html)
+            if parsed.get("waypoints"):
+                return parsed
+        except Exception:
+            pass
+
+    if plain_error is not None:
         reason = (
-            f"HTTP {error.response.status_code}"
-            if isinstance(error, requests.HTTPError) and error.response is not None
-            else type(error).__name__
+            f"HTTP {plain_error.response.status_code}"
+            if isinstance(plain_error, requests.HTTPError) and plain_error.response is not None
+            else type(plain_error).__name__
         )
         raise RouteFetchError(
             f"Could not fetch the {label} navlog from that link ({reason}). "
             "ForeFlight may require you to be signed in, which a server "
             "request can't provide - please upload the .html file instead."
-        ) from error
+        ) from plain_error
 
-    html = response.text
-    parsed = parse_html(html)
-
-    if not parsed.get("waypoints"):
-        raise RouteFetchError(
-            f"That link didn't return a {label} navlog - it may have "
-            "redirected to a ForeFlight sign-in page. Please upload the "
-            ".html file instead."
-        )
-
-    return parsed
+    raise RouteFetchError(
+        f"That link didn't return a {label} navlog - it may have "
+        "redirected to a ForeFlight sign-in page. Please upload the "
+        ".html file instead."
+    )
 
 
 def resolve_route(label, file_key, url_key, required=False):
