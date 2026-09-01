@@ -271,7 +271,17 @@ def draw_page_one(pdf, data):
         ]
         if part
     )
-    _text(pdf, 48.3, 141.43, f"MAIN ROUTE : {main_route}".strip())
+    # A long route can run past the frame's right edge as a single line -
+    # wrapped onto as many lines as it needs, with everything drawn after
+    # it on this page pushed down by the same amount via a canvas
+    # translate, so nothing below needs repositioning for a case that's
+    # usually just one line.
+    main_route_lines = _wrap(f"MAIN ROUTE : {main_route}".strip(), SIZE, FRAME_X1 - 48.3 - 5)
+    main_route_step = 11.2
+    for index, route_line in enumerate(main_route_lines):
+        _text(pdf, 48.3, 141.43 + index * main_route_step, route_line)
+    if len(main_route_lines) > 1:
+        pdf.translate(0, -(len(main_route_lines) - 1) * main_route_step)
 
     _text(pdf, 48.3, 158.57, f"PIC : {_rank(flight.get('pic'))}".rstrip())
     _text(pdf, 299.1, 158.57, f"FO : {_rank(flight.get('fo'))}".rstrip())

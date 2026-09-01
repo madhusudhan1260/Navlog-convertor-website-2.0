@@ -19,6 +19,7 @@ from common import (
     route_header,
     set_page_height,
     value,
+    wrap_text,
     write,
 )
 
@@ -173,9 +174,23 @@ def draw_page_one(pdf, data):
         write(pdf, cruise_line, 308.08, cruise_y, 155, {"size": 7.5, "lineBreak": False})
         cruise_y += 8.91
 
+    # A long route can run past the frame's right edge as a single line -
+    # wrapped onto as many lines as it needs (write()'s own default
+    # wrapping, just no longer suppressed), with everything drawn after
+    # it on this page pushed down by the same amount via a canvas
+    # translate, so nothing below needs repositioning for a case that's
+    # usually just one line.
     flight_level = flight.get("flightLevel", "")
     main_route_str = f"{flight_level} - {_cruise_tail(misc.get('plannedProfile'))} {data.get('routes', {}).get('mainRoute', '')}".strip()
-    write(pdf, f"MAIN ROUTE : {main_route_str}", 46.27, 106.27, TABLE_WIDTH - 20, {"size": 9.4, "lineBreak": False})
+    main_route_text = f"MAIN ROUTE : {main_route_str}"
+    main_route_size = 9.4
+    write(pdf, main_route_text, 46.27, 106.27, TABLE_WIDTH - 20, {"size": main_route_size})
+    # Matches write()'s own wrap width exactly (width - padding*2, padding
+    # defaulting to 2) so the line count here always agrees with what it
+    # actually drew.
+    main_route_lines = wrap_text(main_route_text, FONT_NAME, main_route_size, TABLE_WIDTH - 20 - 4)
+    if len(main_route_lines) > 1:
+        pdf.translate(0, -(len(main_route_lines) - 1) * (main_route_size + 1))
 
     write(pdf, f"PIC : {_rank(flight.get('pic'))}".rstrip(), 46.27, 123.41, 240, {"size": 9.4, "lineBreak": False})
     write(pdf, f"FO : {_rank(flight.get('fo'))}".rstrip(), 297.14, 123.41, 240, {"size": 9.4, "lineBreak": False})
