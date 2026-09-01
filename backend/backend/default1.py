@@ -62,45 +62,6 @@ CENTER_X = (FRAME_X0 + FRAME_X1) / 2
 # registrations are different widths.
 BANNER_X = 96.34
 
-AIRPORT_NAME_LOOKUP = {
-    "VAAH": "AHMEDABAD",
-    "VAHS": "HIRASAR",
-    "VABO": "VADODARA",
-    "VABB": "MUMBAI",
-    "VOMM": "CHENNAI",
-    "VOBL": "BENGALURU",
-    "VOBG": "BENGALURU",
-    "VIDP": "DELHI",
-    "VECC": "KOLKATA",
-    "VOHY": "BEGUMPET",
-    "VOHS": "HYDERABAD",
-    "VOTP": "TIRUPATI",
-    "VILK": "LUCKNOW",
-    "VEBS": "BHUBANESWAR",
-    "VERC": "RANCHI",
-    "VOCI": "KOCHI",
-    "VOTV": "TRIVANDRUM",
-    "VOGO": "GOA",
-    "VANP": "NAGPUR",
-    "VOMD": "MADURAI",
-    "VEBN": "VARANASI",
-    "VIJP": "JAIPUR",
-    "VAPO": "PUNE",
-    "VOCB": "COIMBATORE",
-    "VEGY": "GAYA",
-    "VEGT": "GUWAHATI",
-    "VIAR": "AMRITSAR",
-    "VOML": "MANGALORE",
-    "VOVZ": "VISAKHAPATNAM",
-    "VEPT": "PATNA",
-    "VAID": "INDORE",
-    "VABP": "BHOPAL",
-    "VOTR": "TIRUCHIRAPPALLI",
-    "VOBZ": "VIJAYAWADA",
-    "VARK": "RAJKOT",
-}
-
-
 # --------------------------------------------------
 # DRAWING PRIMITIVES (y measured DOWN from the page top)
 # --------------------------------------------------
@@ -213,33 +174,6 @@ def _cruise_tail(profile_text):
     return match.group(1).strip().upper() if match else ""
 
 
-def _navaid_city(rows, from_end=False):
-    """ForeFlight prints the nearest navaid's city against each waypoint
-    ("AHMEDABAD 113.1") - the first on the route is the departure city and
-    the last the destination city."""
-    ordered = list(reversed(rows)) if from_end else list(rows)
-
-    for row in ordered:
-        detail = value(row.get("waypointDetail"))
-        if not detail:
-            continue
-        word = detail.split()[0]
-        if word.replace(".", "").isdigit():
-            continue
-        return word.upper()
-
-    return ""
-
-
-def _airport_display(code, rows, from_end=False):
-    """Returns the code and the city on their own. Unlike INDO PACIFIC, this
-    sheet draws the separating dash as its own string at a fixed x and puts
-    the city after it, so an airport with no city still prints the dash."""
-    code = value(code)
-    name = AIRPORT_NAME_LOOKUP.get(code.upper()) or _navaid_city(rows, from_end=from_end)
-    return (code, name)
-
-
 def _page_header(pdf, data):
     header = data.get("page1", {}).get("header", {})
     flight = data.get("page1", {}).get("flightInfo", {})
@@ -270,7 +204,6 @@ def draw_page_one(pdf, data):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
-    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -290,27 +223,16 @@ def draw_page_one(pdf, data):
     _text(pdf, BANNER_X, 69.93, banner)
 
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
-    dep_code, dep_name = _airport_display(flight.get("departure"), main_navlog)
-    dest_code, dest_name = _airport_display(
-        flight.get("destination"), main_navlog, from_end=True
-    )
-
-    # The dash sits a fixed gap past the end of the ICAO code, so it moves
-    # with the code's width ("VABP" is 0.5pt narrower than "VOBZ").
-    dash_x = 82.6 + max(_width(dep_code), _width(dest_code)) + 5.27
-
-    def _airport_row(y, code, name):
-        _text(pdf, 82.6, y, code)
-        _text(pdf, dash_x, y, "-")
-        _text(pdf, dash_x + 6.12, y, name)
+    dep_code = value(flight.get("departure"))
+    dest_code = value(flight.get("destination"))
 
     _text(pdf, 50.5, 100.1, "DEP")
     _text(pdf, 77.0, 100.1, ":")
-    _airport_row(100.1, dep_code, dep_name)
+    _text(pdf, 82.6, 100.1, dep_code)
 
     _text(pdf, 50.5, 114.25, "DEST")
     _text(pdf, 77.0, 114.25, ":")
-    _airport_row(114.25, dest_code, dest_name)
+    _text(pdf, 82.6, 114.25, dest_code)
 
     _text(pdf, 251.2, 92.3, "DIST")
     _text(pdf, 300.33, 92.3, ":")
