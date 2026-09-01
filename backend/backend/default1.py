@@ -638,7 +638,24 @@ def _column_x(data):
         widths.append(widest + (WAYPOINT_EXTRA if index == 0 else 0.0))
 
     slack = (TABLE_MIN_RIGHT - TABLE_X0 - sum(widths)) / len(widths)
-    pad = max(COLUMN_PAD, slack)
+    if slack < COLUMN_PAD:
+        # Every column gets at least COLUMN_PAD regardless of slack - so
+        # it's not slack turning negative that signals overflow, it's
+        # slack dropping below that guaranteed floor (a natural_total
+        # that's merely close to the frame's budget still overflows once
+        # COLUMN_PAD is added to every one of ~19 columns). The
+        # WAYPOINT_MERGE_MAX_WIDTH split above keeps most long city names
+        # in check, but an exceptionally long one on its own (no ident/
+        # frequency to shed) can still tip this. Hard guarantee: shrink
+        # every column by the same fraction so the table's total width -
+        # and every ruled line in it - never exceeds the frame, whatever
+        # the content driving it.
+        available = TABLE_MIN_RIGHT - TABLE_X0 - COLUMN_PAD * len(widths)
+        scale = max(available, 0) / sum(widths)
+        widths = [w * scale for w in widths]
+        pad = COLUMN_PAD
+    else:
+        pad = max(COLUMN_PAD, slack)
 
     edges, x = [TABLE_X0], TABLE_X0
     for width in widths:
@@ -714,10 +731,21 @@ def _draw_table_header(pdf, y, COLUMN_X):
     return bottom_bottom
 
 
+# The reference runs the ident straight into the navaid's city with no
+# space ("BBZ" + "VIJAYAWADA") - fine for most cities, but an unusually
+# long one ("THIRUVANANTHAPURAM") merged this way can single-handedly
+# push the WAYPOINT column, and the whole table with it, well past the
+# frame. Above this width the two go back to separate lines instead -
+# still narrower than running the table off the page.
+WAYPOINT_MERGE_MAX_WIDTH = 110.0
+
+
 def _waypoint_lines(row):
     """The reference runs the ident straight into the navaid's city with no
     space ("BBZ" + "VIJAYAWADA") and drops the frequency to a second line,
     which is what makes a row tall."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
     ident = value(row.get("waypoint"))
     detail = value(row.get("waypointDetail"))
 
@@ -725,14 +753,50 @@ def _waypoint_lines(row):
         return [ident]
 
     parts = detail.split()
-    if parts and parts[-1].replace(".", "").isdigit():
-        return [f"{ident}{' '.join(parts[:-1])}", parts[-1]]
+    has_freq = bool(parts) and parts[-1].replace(".", "").isdigit()
+    city = " ".join(parts[:-1] if has_freq else parts)
+    freq = parts[-1] if has_freq else None
 
-    return [f"{ident}{' '.join(parts)}"]
+    merged = f"{ident}{city}"
+    if stringWidth(merged, FONT, SIZE) > WAYPOINT_MERGE_MAX_WIDTH:
+        return [ident, city, freq] if freq else [ident, city]
+
+    return [merged, freq] if freq else [merged]
+
+
+# The reference's own two-tier scheme (14.53pt/25.67pt baselines,
+# ROW_HEIGHT/ROW_TALL_HEIGHT for 1/2 waypoint lines) never needed a 3rd
+# line - only WAYPOINT_MERGE_MAX_WIDTH's split does, for a row whose city
+# is too long to merge with its ident AND still carries a frequency.
+# Extrapolated from the same 11.14pt step the reference's own two tiers
+# already use, rather than a new made-up constant.
+_WAYPOINT_LINE_STEP = 25.67 - 14.53
 
 
 def _row_height(row):
-    return ROW_HEIGHT if len(_waypoint_lines(row)) <= 1 else ROW_TALL_HEIGHT
+    lines = len(_waypoint_lines(row))
+    if lines <= 1:
+        return ROW_HEIGHT
+    if lines == 2:
+        return ROW_TALL_HEIGHT
+    return ROW_TALL_HEIGHT + (lines - 2) * (ROW_TALL_HEIGHT - ROW_HEIGHT)
+
+
+def _fit_size(text, max_width, size=SIZE, font=FONT):
+    """WAYPOINT_MERGE_MAX_WIDTH and _column_x's proportional shrink both
+    work at the column-boundary level - between them an ordinary name
+    never gets here, but a single word too long to break at all (an
+    unusually long city name on its own, no ident or space to shed) can
+    still be wider than the column it ends up in once that column has
+    also been shrunk to keep the table on the page. Shrinking that one
+    line's own font just enough to fit is what actually keeps the text
+    inside its cell rather than spilling into the next one - the last
+    line of defence after the other two."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    width = stringWidth(text, font, size)
+    if width <= max_width or width <= 0:
+        return size
+    return size * max_width / width
 
 
 def _draw_row(pdf, row, y, COLUMN_X):
@@ -745,13 +809,16 @@ def _draw_row(pdf, row, y, COLUMN_X):
     for x in COLUMN_X[:-1]:
         _vline(pdf, x, y, y + height)
 
+    waypoint_width = COLUMN_X[1] - COLUMN_X[0] - 2.62 - 1.5
+
     if len(lines) <= 1:
-        _text(pdf, COLUMN_X[0] + 2.62, y + 14.53, lines[0])
+        _text(pdf, COLUMN_X[0] + 2.62, y + 14.53, lines[0], size=_fit_size(lines[0], waypoint_width))
         value_baseline = y + 14.53
     else:
-        _text(pdf, COLUMN_X[0] + 2.62, y + 14.53, lines[0])
-        _text(pdf, COLUMN_X[0] + 2.62, y + 25.67, lines[1])
-        value_baseline = y + 20.10
+        for index, line_text in enumerate(lines):
+            size = _fit_size(line_text, waypoint_width)
+            _text(pdf, COLUMN_X[0] + 2.62, y + 14.53 + index * _WAYPOINT_LINE_STEP, line_text, size=size)
+        value_baseline = y + 14.53 + (len(lines) - 1) * _WAYPOINT_LINE_STEP / 2
 
     for index, key in enumerate(COLUMN_KEYS):
         if index == 0:
