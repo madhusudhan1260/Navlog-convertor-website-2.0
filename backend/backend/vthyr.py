@@ -25,7 +25,10 @@ from common import OUTPUT_DIRECTORY, find_value, value
 #   * weight unit is detected per upload (htmlParser.detect_weight_unit)
 #     and printed as whichever the source used - KG or LBS - defaulting
 #     to KG (this fleet's historical norm) when neither is detectable
-#   * DEP/DEST are lat/long coordinates ("3049N07653E"), not ICAO codes
+#   * DEP/DEST are lat/long coordinates ("3049N07653E"), not ICAO codes -
+#     no name ever follows the trailing dash, which _airport_display
+#     already handles correctly since it falls back to "-" alone when
+#     neither AIRPORT_NAME_LOOKUP nor the navaid-city guess finds a name
 #   * V-speeds are V1 / VR / V2 / VFTO / VREF (five, not VTKCM's four)
 
 PAGE_W, PAGE_H = A4
@@ -53,6 +56,46 @@ PLAN_ROW_STEP = 14.13
 # regardless of what the row's own computed time delta actually is.
 LEVEL_TIME_ROWS = (1, 3)
 LEVEL_TIME_TEXT = "(0:00)"
+
+AIRPORT_NAME_LOOKUP = {
+    "VOHY": "BEGUMPET",
+    "VOHB": "HUBLI",
+    "VOGA": "GOA",
+    "VOSH": "SHOLAPUR",
+    "VABB": "MUMBAI",
+    "VOMM": "CHENNAI",
+    "VOBL": "BENGALURU",
+    "VOBG": "BENGALURU",
+    "VIDP": "DELHI",
+    "VECC": "KOLKATA",
+    "VAAH": "AHMEDABAD",
+    "VAHS": "HIRASAR",
+    "VABO": "VADODARA",
+    "VOHS": "HYDERABAD",
+    "VOTP": "TIRUPATI",
+    "VILK": "LUCKNOW",
+    "VEBS": "BHUBANESWAR",
+    "VERC": "RANCHI",
+    "VOCI": "KOCHI",
+    "VOTV": "TRIVANDRUM",
+    "VANP": "NAGPUR",
+    "VOMD": "MADURAI",
+    "VEBN": "VARANASI",
+    "VIJP": "JAIPUR",
+    "VAPO": "PUNE",
+    "VOCB": "COIMBATORE",
+    "VEGY": "GAYA",
+    "VEGT": "GUWAHATI",
+    "VIAR": "AMRITSAR",
+    "VOML": "MANGALORE",
+    "VOVZ": "VISAKHAPATNAM",
+    "VEPT": "PATNA",
+    "VAID": "INDORE",
+    "VABP": "BHOPAL",
+    "VOBZ": "VIJAYAWADA",
+    "VARK": "RAJKOT",
+}
+
 
 # --------------------------------------------------
 # DRAWING PRIMITIVES (y measured DOWN from the page top)
@@ -162,6 +205,27 @@ def _cruise_tail(profile_text):
     return match.group(1).strip().upper() if match else ""
 
 
+def _navaid_city(rows, from_end=False):
+    ordered = list(reversed(rows)) if from_end else list(rows)
+
+    for row in ordered:
+        detail = value(row.get("waypointDetail"))
+        if not detail:
+            continue
+        word = detail.split()[0]
+        if word.replace(".", "").isdigit():
+            continue
+        return word.upper()
+
+    return ""
+
+
+def _airport_display(code, rows, from_end=False):
+    code = value(code)
+    name = AIRPORT_NAME_LOOKUP.get(code.upper()) or _navaid_city(rows, from_end=from_end)
+    return (code, f"- {name}" if name else "-")
+
+
 def _page_header(pdf, data):
     header = data.get("page1", {}).get("header", {})
     flight = data.get("page1", {}).get("flightInfo", {})
@@ -211,6 +275,7 @@ def draw_page_one(pdf, data):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
+    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -230,14 +295,22 @@ def draw_page_one(pdf, data):
     _text_center(pdf, BANNER_CENTER_X, 69.93, banner)
 
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
-    dep_code = value(flight.get("departure"))
-    dest_code = value(flight.get("destination"))
+    # DEP/DEST are lat/long coordinates, not ICAO codes - _airport_display
+    # already falls back to a bare "-" (no name) when neither
+    # AIRPORT_NAME_LOOKUP nor the navaid-city guess finds anything, which
+    # is exactly what this reference prints.
+    dep_code, dep_name = _airport_display(flight.get("departure"), main_navlog)
+    dest_code, dest_name = _airport_display(
+        flight.get("destination"), main_navlog, from_end=True
+    )
 
     _text(pdf, 50.5, 100.1, "DEP")
     _text(pdf, 76.95, 100.1, f":{dep_code}")
+    _text(pdf, 142.6, 100.1, dep_name)
 
     _text(pdf, 50.5, 114.25, "DEST")
     _text(pdf, 76.95, 114.25, f":{dest_code}")
+    _text(pdf, 142.6, 114.25, dest_name)
 
     _text(pdf, 251.2, 92.3, "DIST")
     _text(pdf, 302.2, 92.3, ":")
@@ -513,7 +586,7 @@ COLUMN_GROUPS = [
     ("WIND", 5, 6),
     ("SPD KT", 8, 9),
     ("DIST NM", 10, 11),
-    ("FUEL LB", 12, 13),
+    ("FUEL KG", 12, 13),
     ("TIME", 14, 16),
 ]
 

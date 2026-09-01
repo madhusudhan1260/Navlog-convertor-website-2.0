@@ -57,6 +57,45 @@ CENTER_X = (FRAME_X0 + FRAME_X1) / 2
 # The reference sets its banner slightly left of the frame's centre.
 BANNER_CENTER_X = 280.5
 
+AIRPORT_NAME_LOOKUP = {
+    "VAAH": "AHMEDABAD",
+    "VAHS": "HIRASAR",
+    "VABO": "VADODARA",
+    "VABB": "MUMBAI",
+    "VOMM": "CHENNAI",
+    "VOBL": "BENGALURU",
+    "VOBG": "BENGALURU",
+    "VIDP": "DELHI",
+    "VECC": "KOLKATA",
+    "VOHY": "BEGUMPET",
+    "VOHS": "HYDERABAD",
+    "VOTP": "TIRUPATI",
+    "VILK": "LUCKNOW",
+    "VEBS": "BHUBANESWAR",
+    "VERC": "RANCHI",
+    "VOCI": "KOCHI",
+    "VOTV": "TRIVANDRUM",
+    "VOGO": "GOA",
+    "VANP": "NAGPUR",
+    "VOMD": "MADURAI",
+    "VEBN": "VARANASI",
+    "VIJP": "JAIPUR",
+    "VAPO": "PUNE",
+    "VOCB": "COIMBATORE",
+    "VEGY": "GAYA",
+    "VEGT": "GUWAHATI",
+    "VIAR": "AMRITSAR",
+    "VOML": "MANGALORE",
+    "VOVZ": "VISAKHAPATNAM",
+    "VEPT": "PATNA",
+    "VAID": "INDORE",
+    "VABP": "BHOPAL",
+    "VOTR": "TIRUCHIRAPPALLI",
+    "VOBZ": "VIJAYAWADA",
+    "VARK": "RAJKOT",
+}
+
+
 # --------------------------------------------------
 # DRAWING PRIMITIVES (y measured DOWN from the page top)
 # --------------------------------------------------
@@ -164,6 +203,30 @@ def _cruise_tail(profile_text):
     return match.group(1).strip().upper() if match else ""
 
 
+def _navaid_city(rows, from_end=False):
+    """ForeFlight prints the nearest navaid's city against each waypoint
+    ("AHMEDABAD 113.1") - the first on the route is the departure city and
+    the last the destination city."""
+    ordered = list(reversed(rows)) if from_end else list(rows)
+
+    for row in ordered:
+        detail = value(row.get("waypointDetail"))
+        if not detail:
+            continue
+        word = detail.split()[0]
+        if word.replace(".", "").isdigit():
+            continue
+        return word.upper()
+
+    return ""
+
+
+def _airport_display(code, rows, from_end=False):
+    code = value(code)
+    name = AIRPORT_NAME_LOOKUP.get(code.upper()) or _navaid_city(rows, from_end=from_end)
+    return (code, f"- {name}" if name else "-")
+
+
 def _page_header(pdf, data):
     header = data.get("page1", {}).get("header", {})
     flight = data.get("page1", {}).get("flightInfo", {})
@@ -191,6 +254,7 @@ def draw_page_one(pdf, data, force_alternate2=False):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
+    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -210,16 +274,20 @@ def draw_page_one(pdf, data, force_alternate2=False):
     _text_center(pdf, BANNER_CENTER_X, 69.9, banner)
 
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
-    dep_code = value(flight.get("departure"))
-    dest_code = value(flight.get("destination"))
+    dep_code, dep_name = _airport_display(flight.get("departure"), main_navlog)
+    dest_code, dest_name = _airport_display(
+        flight.get("destination"), main_navlog, from_end=True
+    )
 
     _text(pdf, 50.5, 95.7, "DEP")
     _text(pdf, 77.0, 95.7, ":")
     _text(pdf, 82.6, 95.7, dep_code)
+    _text(pdf, 115.0, 95.7, dep_name)
 
     _text(pdf, 50.5, 109.8, "DEST")
     _text(pdf, 77.0, 109.8, ":")
     _text(pdf, 82.6, 109.8, dest_code)
+    _text(pdf, 115.0, 109.8, dest_name)
 
     _text(pdf, 251.2, 92.3, "DIST")
     _text(pdf, 301.2, 92.3, ":")

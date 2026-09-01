@@ -258,9 +258,8 @@ def draw_misc_section(pdf, data):
     misc = data.get("page1", {}).get("misc", {})
     section_heading(pdf, "MISC", 72, 347, 220)
 
-    # The intermediate-power-segment ("INTERMEDIATE") and emergency/OEI
-    # trailing-segment normalisation both happen once, in claude.py, so
-    # every format's own PLN PROFILE line agrees - not just this one's.
+    # The intermediate-power-segment ("INTERMEDIATE") for VTBBD and emergency/OEI
+    # trailing-segment normalisation happen in claude.py.
     pln_profile = value(misc.get("plannedProfile")).upper()
 
     flight_rules = find_value(misc, "flightRules", "flight_rules", "rules").upper()

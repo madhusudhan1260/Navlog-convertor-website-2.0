@@ -50,6 +50,47 @@ PAGE_FRAME_BOTTOM = 757.2
 CENTER_X = (FRAME_X0 + FRAME_X1) / 2
 BANNER_CENTER_X = 287.0
 
+# Airport full names ForeFlight's export never carries. Anything not
+# listed here falls back to the city name printed against the first (or
+# last) navaid in the navlog - see _airport_name() - and finally to just
+# the ICAO code.
+AIRPORT_NAME_LOOKUP = {
+    "VABB": "MUMBAI",
+    "VOMM": "CHENNAI",
+    "VOBL": "BENGALURU",
+    "VOBG": "BENGALURU",
+    "VIDP": "DELHI",
+    "VECC": "KOLKATA",
+    "VOHY": "BEGUMPET",
+    "VOHS": "HYDERABAD",
+    "VOTP": "TIRUPATI",
+    "VILK": "LUCKNOW",
+    "VEBS": "BHUBANESWAR",
+    "VERC": "RANCHI",
+    "VOCI": "KOCHI",
+    "VOTV": "TRIVANDRUM",
+    "VAAH": "AHMEDABAD",
+    "VOGO": "GOA",
+    "VANP": "NAGPUR",
+    "VOMD": "MADURAI",
+    "VEBN": "VARANASI",
+    "VIJP": "JAIPUR",
+    "VAPO": "PUNE",
+    "VOCB": "COIMBATORE",
+    "VEGY": "GAYA",
+    "VEGT": "GUWAHATI",
+    "VIAR": "AMRITSAR",
+    "VOML": "MANGALORE",
+    "VOVZ": "VISAKHAPATNAM",
+    "VEPT": "PATNA",
+    "VABO": "VADODARA",
+    "VAID": "INDORE",
+    "VABP": "BHOPAL",
+    "VOTR": "TIRUCHIRAPPALLI",
+    "VOBZ": "VIJAYAWADA",
+}
+
+
 # --------------------------------------------------
 # DRAWING PRIMITIVES (y measured DOWN from the page top)
 # --------------------------------------------------
@@ -162,6 +203,38 @@ def _cruise_tail(profile_text):
     return match.group(1).strip().upper() if match else ""
 
 
+def _navaid_city(rows, from_end=False):
+    """ForeFlight prints the nearest navaid's city against each waypoint
+    ("MUMBAI 116.6"). The first such city on the route is the departure
+    city and the last is the destination city, which is the only place an
+    airport's full name appears anywhere in the export."""
+    ordered = list(reversed(rows)) if from_end else list(rows)
+
+    for row in ordered:
+        detail = value(row.get("waypointDetail"))
+        if not detail:
+            continue
+        word = detail.split()[0]
+        if word.replace(".", "").isdigit():
+            continue
+        return word.upper()
+
+    return ""
+
+
+def _airport_name(code, rows, from_end=False):
+    code = value(code).upper()
+    if code in AIRPORT_NAME_LOOKUP:
+        return AIRPORT_NAME_LOOKUP[code]
+    return _navaid_city(rows, from_end=from_end)
+
+
+def _airport_display(code, rows, from_end=False):
+    code = value(code)
+    name = _airport_name(code, rows, from_end=from_end)
+    return (code, f"- {name}" if name else "")
+
+
 def _page_header(pdf, data):
     """The "VABB - VOMM   VTCSP" line that sits above the frame on every
     page."""
@@ -194,6 +267,7 @@ def draw_page_one(pdf, data):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
+    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -215,16 +289,20 @@ def draw_page_one(pdf, data):
     _text_center(pdf, BANNER_CENTER_X, 67.6, banner)
 
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
-    dep_code = value(flight.get("departure"))
-    dest_code = value(flight.get("destination"))
+    dep_code, dep_name = _airport_display(flight.get("departure"), main_navlog)
+    dest_code, dest_name = _airport_display(
+        flight.get("destination"), main_navlog, from_end=True
+    )
 
     _text(pdf, 73.7, 96.6, "DEP")
     _text(pdf, 98.3, 96.6, ":")
     _text(pdf, 103.5, 96.6, dep_code)
+    _text(pdf, 136.9, 96.6, dep_name)
 
     _text(pdf, 73.7, 110.2, "DEST")
     _text(pdf, 98.3, 110.2, ":")
     _text(pdf, 103.5, 110.2, dest_code)
+    _text(pdf, 137.1, 110.2, dest_name)
 
     _text(pdf, 262.3, 87.3, "DIST")
     _text(pdf, 310.1, 87.3, ":")

@@ -642,7 +642,7 @@ def generate_pdf(navlog, file_prefix="MLOVE"):
         from vtkcm import generate_vtkcm_pdf
         return generate_vtkcm_pdf(navlog)
 
-    if prefix == "VTHYR":
+    if prefix in ("VTHYR", "VTTEN", "TEN", "VTHYR/VTTEN", "VTHYR_VTTEN", "VTHYRVTTEN"):
         from vthyr import generate_vthyr_pdf
         return generate_vthyr_pdf(navlog)
 

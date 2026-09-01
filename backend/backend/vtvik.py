@@ -36,6 +36,71 @@ from common import (
 TABLE_LEFT = 34.77
 TABLE_WIDTH = 525.74
 
+# Airport full names ForeFlight's export never carries. Kept in sync with
+# default1.py's own table - both fall back further, to the nearest navaid
+# city the navlog itself carries, for anything not listed here.
+AIRPORT_NAME_LOOKUP = {
+    "VAAH": "AHMEDABAD",
+    "VAHS": "HIRASAR",
+    "VABO": "VADODARA",
+    "VABB": "MUMBAI",
+    "VOMM": "CHENNAI",
+    "VOBL": "BENGALURU",
+    "VOBG": "BENGALURU",
+    "VIDP": "DELHI",
+    "VECC": "KOLKATA",
+    "VOHY": "BEGUMPET",
+    "VOHS": "HYDERABAD",
+    "VOTP": "TIRUPATI",
+    "VILK": "LUCKNOW",
+    "VEBS": "BHUBANESWAR",
+    "VERC": "RANCHI",
+    "VOCI": "KOCHI",
+    "VOTV": "TRIVANDRUM",
+    "VOGO": "GOA",
+    "VANP": "NAGPUR",
+    "VOMD": "MADURAI",
+    "VEBN": "VARANASI",
+    "VIJP": "JAIPUR",
+    "VAPO": "PUNE",
+    "VOCB": "COIMBATORE",
+    "VEGY": "GAYA",
+    "VEGT": "GUWAHATI",
+    "VIAR": "AMRITSAR",
+    "VOML": "MANGALORE",
+    "VOVZ": "VISAKHAPATNAM",
+    "VEPT": "PATNA",
+    "VAID": "INDORE",
+    "VABP": "BHOPAL",
+    "VOTR": "TIRUCHIRAPPALLI",
+    "VOBZ": "VIJAYAWADA",
+    "VARK": "RAJKOT",
+}
+
+
+def _navaid_city(rows, from_end=False):
+    """ForeFlight prints the nearest navaid's city against each waypoint
+    ("AHMEDABAD 113.1") - the first on the route is the departure city and
+    the last the destination city. Same fallback default1.py uses."""
+    ordered = list(reversed(rows)) if from_end else list(rows)
+
+    for row in ordered:
+        detail = value(row.get("waypointDetail"))
+        if not detail:
+            continue
+        word = detail.split()[0]
+        if word.replace(".", "").isdigit():
+            continue
+        return word.upper()
+
+    return ""
+
+
+def _city_name(code, rows, from_end=False):
+    code = value(code)
+    return AIRPORT_NAME_LOOKUP.get(code.upper()) or _navaid_city(rows, from_end=from_end)
+
+
 def _wrap(content, size, max_width, font=FONT_NAME):
     """Word-wraps content to max_width at size - same greedy algorithm
     default1.py's own _wrap uses, since VTVIK's PLN PROFILE/alternate
@@ -137,8 +202,11 @@ def draw_page_one(pdf, data):
     banner = f"- - - - - {reg_val} ({ac_type}) {date_str} NAV LOG/ OPS FPL FOR ETD {etd} (ETA {eta}) - - - - -"
     write(pdf, banner, TABLE_LEFT, 47.43, TABLE_WIDTH, {"size": 9.4, "align": "center", "lineBreak": False})
 
+    main_navlog = data.get("mainNavlog", [])
     dep_code = value(flight.get("departure", ""))
     dest_code = value(flight.get("destination", ""))
+    dep_name = _city_name(dep_code, main_navlog)
+    dest_name = _city_name(dest_code, main_navlog, from_end=True)
 
     dist_val = value(time_info.get("plannedRouteDistance"))
     track_val = value(time_info.get("track"))
@@ -148,6 +216,8 @@ def draw_page_one(pdf, data):
     # ---- DEP/DEST + DIST/CRUISE + TRACK/PAX ----
     write(pdf, "DEP", 48.52, 69.40, 25, {"size": 9.4, "lineBreak": False})
     write(pdf, f":{dep_code}", 74.95, 69.40, 45, {"size": 9.4, "lineBreak": False})
+    if dep_name:
+        write(pdf, f"-{dep_name}", 112.98, 69.40, 140, {"size": 9.4, "lineBreak": False})
 
     write(pdf, "DIST", 249.22, 66.06, 25, {"size": 9.4, "lineBreak": False})
     write(pdf, ":", 300.21, 66.06, 8, {"size": 9.4, "lineBreak": False})
@@ -157,6 +227,8 @@ def draw_page_one(pdf, data):
 
     write(pdf, "DEST", 48.52, 83.54, 25, {"size": 9.4, "lineBreak": False})
     write(pdf, f":{dest_code}", 74.95, 83.54, 45, {"size": 9.4, "lineBreak": False})
+    if dest_name:
+        write(pdf, f"-{dest_name}", 112.98, 83.54, 140, {"size": 9.4, "lineBreak": False})
 
     write(pdf, "CRUISE", 249.22, 83.54, 30, {"size": 9.4, "lineBreak": False})
     write(pdf, ":", 300.21, 83.54, 8, {"size": 9.4, "lineBreak": False})

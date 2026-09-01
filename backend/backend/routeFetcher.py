@@ -125,8 +125,8 @@ def fetch_route_html(label, url):
             parsed = parse_html(html)
             if parsed.get("waypoints"):
                 return parsed
-        except Exception:
-            pass
+        except Exception as error:
+            print(f"[ERROR] Playwright fetch error: {error}")
 
     if plain_error is not None:
         reason = (

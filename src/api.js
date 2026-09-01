@@ -13,7 +13,14 @@
 // That is exactly what happened to one of the two Vercel deployments of
 // this repo, and it made the site unusable on any device that opened it.
 const PRODUCTION_API = "https://eflightops-api.onrender.com";
-const LOCAL_API = "http://localhost:5000";
+
+function isPrivateNetwork(host) {
+  if (!host) return false;
+  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return true;
+  if (/^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return true;
+  if (host.endsWith(".local") || host.endsWith(".lan") || host.endsWith(".home")) return true;
+  return false;
+}
 
 function resolveApiUrl() {
   const configured = (import.meta.env.VITE_API_URL || "").trim();
@@ -21,12 +28,13 @@ function resolveApiUrl() {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    const isLocal =
-      host === "localhost" || host === "127.0.0.1" || host === "[::1]";
-    if (!isLocal) return PRODUCTION_API;
+    if (isPrivateNetwork(host)) {
+      return `http://${host}:5000`;
+    }
+    return PRODUCTION_API;
   }
 
-  return LOCAL_API;
+  return "http://localhost:5000";
 }
 
 export const API_URL = resolveApiUrl();

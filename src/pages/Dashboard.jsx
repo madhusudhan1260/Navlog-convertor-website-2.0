@@ -133,6 +133,7 @@ const FORMATS = [
   },
   {
     id: "VTHYR",
+    label: "VTHYR / VTTEN",
     key: "HY",
     note: "A4 · helicopter, KG, coordinates",
     tips: [
@@ -275,16 +276,16 @@ const FORM_SECTIONS = [
       {
         cols: 3,
         fields: [
-          { name: "callSign", label: "Call Sign", placeholder: "VTECG" },
-          { name: "pilotName", label: "Pilot in Command", placeholder: "CAPT SHREYAS VYAS" },
-          { name: "coPilotName", label: "First Officer", placeholder: "CAPT SANSKAR MISHRA" },
+          { name: "callSign", label: "Call Sign", placeholder: "" },
+          { name: "pilotName", label: "Pilot in Command", placeholder: "" },
+          { name: "coPilotName", label: "First Officer", placeholder: "" },
         ],
       },
       {
         cols: 2,
         fields: [
-          { name: "cabinCrewName", label: "Cabin Crew Name", placeholder: "MS SHWETA DIWAN" },
-          { name: "ccWeight", label: "Cabin Crew Count", withUnit: true, placeholder: "1" },
+          { name: "cabinCrewName", label: "Cabin Crew Name", placeholder: "" },
+          { name: "ccWeight", label: "Cabin Crew Count", withUnit: true, placeholder: "" },
         ],
       },
     ],
@@ -298,9 +299,9 @@ const FORM_SECTIONS = [
       {
         cols: 3,
         fields: [
-          { name: "departure", label: "Departure ICAO", placeholder: "VIDP" },
-          { name: "destination", label: "Destination ICAO", placeholder: "VECC" },
-          { name: "flightLevel", label: "Flight Level", placeholder: "FL450" },
+          { name: "departure", label: "Departure ICAO", placeholder: "" },
+          { name: "destination", label: "Destination ICAO", placeholder: "" },
+          { name: "flightLevel", label: "Flight Level", placeholder: "" },
         ],
       },
     ],
