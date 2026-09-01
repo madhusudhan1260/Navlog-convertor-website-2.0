@@ -22,9 +22,11 @@ AIRCRAFT_FUEL_LIMITS = {
     "VTBBN": {"maxTrip": "3235"},
     "VTKCM": {"maxTrip": "3453"},
     "VTKCM2": {"maxTrip": "3453"},
-    # VTHYR (EC45): taken from the operator's own original reference OPS
+    # VTHYR / VTTEN (EC45): taken from the operator's own original reference OPS
     # FPL for this tail, same as the other rows above.
     "VTHYR": {"maxTrip": "723"},
+    "VTTEN": {"maxTrip": "723"},
+    "TEN": {"maxTrip": "723"},
 }
 
 
@@ -41,7 +43,7 @@ AIRCRAFT_FUEL_LIMITS = {
 # matching WIND : 19KT HEAD (274°/021)) rather than the computed track.
 PLAN_TIME_TEMPLATES = (
     "VTCSP", "VTAHP", "INDOPACIFIC", "INDOPACIFIC1", "INDOPACIFIC2", "VTKCM",
-    "DEFAULT", "DEFAULT1", "VTVIK", "VTHYR",
+    "DEFAULT", "DEFAULT1", "VTVIK", "VTHYR", "VTTEN", "TEN", "VTHYR_VTTEN", "VTHYRVTTEN",
 )
 
 # VTAHP prints the same sheet as VTCSP with one rule change: CONTINGENCY
@@ -1436,20 +1438,19 @@ def convert_with_claude(master_json, template="MLOVE"):
             f"{flight_rules} {page1['misc']['plannedProfile']}".strip()
         )
 
-    # FIX: the profile string is "<segment1> - <segment2> @ <alt> -
-    # <segment3>". <segment2> - whatever power setting the aircraft holds
-    # between its first climb speed and reaching cruise altitude - prints
-    # as a literal Mach/KIAS figure ("MACH 0.76", "250 KIAS/M0.77") that
-    # varies flight to flight, but the operator always wants it read as
-    # "INTERMEDIATE" regardless of its exact wording. Matches the first
-    # " - <anything> @ " span non-greedily so segment1 (which never
-    # contains "@") is left alone.
-    page1["misc"]["plannedProfile"] = re.sub(
-        r"-\s*[^-]+?\s*@",
-        "- INTERMEDIATE @",
-        page1["misc"]["plannedProfile"],
-        count=1,
-    )
+    # The profile string is "<segment1> - <segment2> @ <alt> - <segment3>".
+    # <segment2> - whatever power setting the aircraft holds between its
+    # first climb speed and reaching cruise altitude - prints as a literal
+    # Mach/KIAS figure ("MACH 0.76", "250 KIAS/M0.77") that varies flight to flight.
+    # For VTBBD format, the operator wants it formatted as "INTERMEDIATE".
+    # For all other formats, it should come directly from ForeFlight.
+    if template == "VTBBD" and page1["misc"]["plannedProfile"]:
+        page1["misc"]["plannedProfile"] = re.sub(
+            r"-\s*[^-]+?\s*@",
+            "- INTERMEDIATE @",
+            page1["misc"]["plannedProfile"],
+            count=1,
+        )
 
     # <segment3>, when present, is normally a real descent speed schedule
     # ("M0.78/300/250 KIAS") and stays. But some exports carry an

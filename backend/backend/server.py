@@ -183,6 +183,7 @@ def convert():
                 "Alternate 2", "alternate2File", "alternate2Url"
             )
         except RouteFetchError as error:
+            print(f"[ERROR] Route fetch failed: {error}")
             return jsonify({
                 "success": False,
                 "message": str(error),
@@ -270,6 +271,8 @@ def convert():
         # RESPONSE
         # -------------------------------------
 
+        base_url = _configured if _configured else request.host_url.rstrip("/")
+
         return jsonify({
 
             "success": True,
@@ -278,7 +281,7 @@ def convert():
 
             "pdf":
 
-                f"{PUBLIC_URL}/"
+                f"{base_url}/"
 
                 + pdf_path.replace(
 
