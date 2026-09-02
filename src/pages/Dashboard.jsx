@@ -26,7 +26,6 @@ const FORMATS = [
   },
   {
     id: "DEFAULT",
-    label: "DEFAULT 2",
     key: "DF",
     note: "A4 · standard nav log",
     tips: [
