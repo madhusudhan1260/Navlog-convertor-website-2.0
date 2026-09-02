@@ -5,7 +5,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-from common import OUTPUT_DIRECTORY, find_value, value
+from common import OUTPUT_DIRECTORY, airport_city_name, find_value, value
 
 # --------------------------------------------------
 # VTCSP TEMPLATE
@@ -194,6 +194,7 @@ def draw_page_one(pdf, data):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
+    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -217,14 +218,20 @@ def draw_page_one(pdf, data):
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
     dep_code = value(flight.get("departure"))
     dest_code = value(flight.get("destination"))
+    dep_city = airport_city_name(dep_code, main_navlog)
+    dest_city = airport_city_name(dest_code, main_navlog, from_end=True)
 
     _text(pdf, 73.7, 96.6, "DEP")
     _text(pdf, 98.3, 96.6, ":")
     _text(pdf, 103.5, 96.6, dep_code)
+    if dep_city:
+        _text(pdf, 136.9, 96.6, f"- {dep_city}")
 
     _text(pdf, 73.7, 110.2, "DEST")
     _text(pdf, 98.3, 110.2, ":")
     _text(pdf, 103.5, 110.2, dest_code)
+    if dest_city:
+        _text(pdf, 137.1, 110.2, f"- {dest_city}")
 
     _text(pdf, 262.3, 87.3, "DIST")
     _text(pdf, 310.1, 87.3, ":")

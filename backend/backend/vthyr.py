@@ -5,7 +5,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from common import OUTPUT_DIRECTORY, find_value, value
+from common import OUTPUT_DIRECTORY, airport_city_name, find_value, value
 
 # --------------------------------------------------
 # VTHYR TEMPLATE (EC145 helicopter, KG, coordinate waypoints)
@@ -211,6 +211,7 @@ def draw_page_one(pdf, data):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
+    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -230,14 +231,24 @@ def draw_page_one(pdf, data):
     _text_center(pdf, BANNER_CENTER_X, 69.93, banner)
 
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
+    # DEP/DEST are usually lat/long coordinates on this fleet, not ICAO
+    # codes - airport_city_name() naturally returns nothing for those
+    # (they never match the 3-6 char/VT-VO-VM prefix rule), so this is
+    # only ever visible on the rare upload where a real code is entered.
     dep_code = value(flight.get("departure"))
     dest_code = value(flight.get("destination"))
+    dep_city = airport_city_name(dep_code, main_navlog)
+    dest_city = airport_city_name(dest_code, main_navlog, from_end=True)
 
     _text(pdf, 50.5, 100.1, "DEP")
     _text(pdf, 76.95, 100.1, f":{dep_code}")
+    if dep_city:
+        _text(pdf, 142.6, 100.1, f"- {dep_city}")
 
     _text(pdf, 50.5, 114.25, "DEST")
     _text(pdf, 76.95, 114.25, f":{dest_code}")
+    if dest_city:
+        _text(pdf, 142.6, 114.25, f"- {dest_city}")
 
     _text(pdf, 251.2, 92.3, "DIST")
     _text(pdf, 302.2, 92.3, ":")
