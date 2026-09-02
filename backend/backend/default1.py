@@ -5,7 +5,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from common import OUTPUT_DIRECTORY, airport_city_name, find_value, value
+from common import OUTPUT_DIRECTORY, find_value, value
 
 # --------------------------------------------------
 # DEFAULT 1 TEMPLATE
@@ -204,7 +204,6 @@ def draw_page_one(pdf, data):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
-    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -226,26 +225,14 @@ def draw_page_one(pdf, data):
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
     dep_code = value(flight.get("departure"))
     dest_code = value(flight.get("destination"))
-    dep_city = airport_city_name(dep_code, main_navlog)
-    dest_city = airport_city_name(dest_code, main_navlog, from_end=True)
-
-    # The dash sits a fixed gap past the end of the ICAO code, so it moves
-    # with the code's width ("VABP" is 0.5pt narrower than "VOBZ").
-    dash_x = 82.6 + max(_width(dep_code), _width(dest_code)) + 5.27
 
     _text(pdf, 50.5, 100.1, "DEP")
     _text(pdf, 77.0, 100.1, ":")
     _text(pdf, 82.6, 100.1, dep_code)
-    if dep_city:
-        _text(pdf, dash_x, 100.1, "-")
-        _text(pdf, dash_x + 6.12, 100.1, dep_city)
 
     _text(pdf, 50.5, 114.25, "DEST")
     _text(pdf, 77.0, 114.25, ":")
     _text(pdf, 82.6, 114.25, dest_code)
-    if dest_city:
-        _text(pdf, dash_x, 114.25, "-")
-        _text(pdf, dash_x + 6.12, 114.25, dest_city)
 
     _text(pdf, 251.2, 92.3, "DIST")
     _text(pdf, 300.33, 92.3, ":")

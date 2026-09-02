@@ -5,7 +5,7 @@ from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from common import OUTPUT_DIRECTORY, airport_city_name, find_value, value
+from common import OUTPUT_DIRECTORY, find_value, value
 
 # --------------------------------------------------
 # INDO PACIFIC TEMPLATE (1 ALT / 2 ALT)
@@ -191,7 +191,6 @@ def draw_page_one(pdf, data, force_alternate2=False):
     alternates = page1.get("alternates", [])
     level_calcs = data.get("levelCalculations", [])
     atc = data.get("atcFlightPlan", {})
-    main_navlog = data.get("mainNavlog", [])
 
     _page_header(pdf, data)
     _rect(pdf, FRAME_X0, FRAME_TOP, FRAME_X1, FRAME_BOTTOM)
@@ -213,20 +212,14 @@ def draw_page_one(pdf, data, force_alternate2=False):
     # ---- DEP / DEST + DIST / CRUISE + TRACK / PAX ----
     dep_code = value(flight.get("departure"))
     dest_code = value(flight.get("destination"))
-    dep_city = airport_city_name(dep_code, main_navlog)
-    dest_city = airport_city_name(dest_code, main_navlog, from_end=True)
 
     _text(pdf, 50.5, 95.7, "DEP")
     _text(pdf, 77.0, 95.7, ":")
     _text(pdf, 82.6, 95.7, dep_code)
-    if dep_city:
-        _text(pdf, 115.0, 95.7, f"- {dep_city}")
 
     _text(pdf, 50.5, 109.8, "DEST")
     _text(pdf, 77.0, 109.8, ":")
     _text(pdf, 82.6, 109.8, dest_code)
-    if dest_city:
-        _text(pdf, 115.0, 109.8, f"- {dest_city}")
 
     _text(pdf, 251.2, 92.3, "DIST")
     _text(pdf, 301.2, 92.3, ":")
