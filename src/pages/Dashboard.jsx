@@ -1076,32 +1076,23 @@ function Dashboard() {
       <div className="page">
 
         {/* ================= HERO ================= */}
+        {/* Step 2 skips the hero entirely (no eyebrow, heading, blurb, or
+            stats row) - only the picker (step 1) shows it. */}
 
-        <div className="hero">
+        {
+          step === "format" && (
 
-          <div className="eyebrow">
-            {step === "format" ? "Step 1 of 2" : "Step 2 of 2"}
-          </div>
+            <div className="hero">
 
-          {
-            step === "format"
-              ? <h1>Choose an <em>output format</em></h1>
-              : <h1>Fill in the <em>{formatLabel(form.selectedFormat)}</em> details</h1>
-          }
+              <div className="eyebrow">Step 1 of 2</div>
 
-          <p>
-            {
-              step === "format"
-                ? "Every fleet prints its operational flight plan to its own template. "
-                  + "Pick one and the next step asks only for the figures that template "
-                  + "actually prints."
-                : "Upload your ForeFlight navlog exports and add the figures ForeFlight "
-                  + "doesn't carry. Anything left blank prints as a hand-fill line."
-            }
-          </p>
+              <h1>Choose an <em>output format</em></h1>
 
-          {
-            step === "format" && (
+              <p>
+                Every fleet prints its operational flight plan to its own template.
+                Pick one and the next step asks only for the figures that template
+                actually prints.
+              </p>
 
               <div className="hero-stats">
 
@@ -1127,10 +1118,10 @@ function Dashboard() {
 
               </div>
 
-            )
-          }
+            </div>
 
-        </div>
+          )
+        }
 
         {/* ================= STEP 1: FORMAT PICKER ================= */}
 
