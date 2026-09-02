@@ -864,10 +864,9 @@ function Dashboard() {
 
   const chosen = FORMATS.find((f) => f.id === form.selectedFormat);
 
-  // One tab per step-2 section - the format-specific ones plus the two
-  // that always show (Files, ATC) - so the wizard's tab bar and the
-  // Prev/Next buttons have a single list to walk, regardless of how many
-  // of the dynamic sections this format actually uses.
+  // One entry per step-2 section - the format-specific ones plus the two
+  // that always show (Files, ATC) - rendered all at once in a fixed
+  // two-column layout (see leftTabs/rightTabs below) instead of tabs.
   const tabs = [
     ...visibleSections.map((section) => ({
       num: section.num,
@@ -879,6 +878,79 @@ function Dashboard() {
     { num: "04", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
     { num: "05", title: "ATC Flight Plan", accent: "c-teal", kind: "atc" },
   ];
+
+  // Fixed three-column split - always the same sections in the same
+  // column regardless of content height, so the layout never reshuffles
+  // itself (e.g. pasting a long ATC flight plan used to move sections
+  // between columns because the CSS multi-column flow rebalanced).
+  // Fuel & Weights gets its own column because it's consistently the
+  // tallest section across every format - pairing it with anything
+  // else is what pushed the page past one screen.
+  const leftTabs = tabs.filter((tab) => tab.num === "01" || tab.num === "02");
+  const midTabs = tabs.filter((tab) => tab.num === "03");
+  const rightTabs = tabs.filter((tab) => tab.num === "04" || tab.num === "05");
+
+  function renderCompactSection(tab) {
+
+    return (
+
+      <section className={`section compact ${tab.accent}`} key={tab.num}>
+
+        <div className="section-head">
+          <div className="section-num">{tab.num}</div>
+          <h2>{tab.title}</h2>
+          {tab.kind === "fields" && tab.section.hint ? <span className="hint">{tab.section.hint}</span> : null}
+          {tab.kind === "atc" ? <span className="hint">Printed verbatim on the final page</span> : null}
+        </div>
+
+        <div className="section-body">
+
+          {
+            tab.kind === "fields" && tab.section.rows.map((row, index) => (
+              <div
+                className={`grid${Math.min(row.cols, row.fields.length)}`}
+                key={index}
+              >
+                {row.fields.map(renderField)}
+              </div>
+            ))
+          }
+
+          {
+            tab.kind === "files" && (
+              <div className="grid1">
+                <FilePicker name="mainFile" urlName="mainUrl" title="Main Route" required />
+                <FilePicker name="alternate1File" urlName="alternate1Url" title="Alternate 1" />
+                <FilePicker name="alternate2File" urlName="alternate2Url" title="Alternate 2" />
+              </div>
+            )
+          }
+
+          {
+            tab.kind === "atc" && (
+              <div className="field">
+                <label>Full ICAO FPL text</label>
+                <textarea
+                  name="icaoFlightPlan"
+                  placeholder={"(FPL-VTECG-IN\n-C25A/L-SDFGHRWY/LB1\n-VIDP0945\n-N0411F450 DPN V18 ALI G452 LKN R460 CEA\n..."}
+                  value={form.icaoFlightPlan}
+                  onChange={update}
+                  onInput={autoGrowTextarea}
+                  ref={autoGrowTextarea}
+                  rows={3}
+                  className="grow"
+                />
+              </div>
+            )
+          }
+
+        </div>
+
+      </section>
+
+    );
+
+  }
 
   function pickFormat(id) {
     navigate(`/dashboard/${id}`);
@@ -1271,71 +1343,25 @@ function Dashboard() {
 
           <main>
 
-            {/* ---- ALL SECTIONS AT ONCE, COMPACT GRID ---- */}
-            {/* Every section visible simultaneously (no tabs, no paging)
-                in a multi-column grid so the whole thing is short enough
-                to need no scrolling, the same way regardless of format. */}
+            {/* ---- ALL SECTIONS AT ONCE, FIXED THREE-COLUMN LAYOUT ---- */}
+            {/* Every section visible simultaneously (no tabs, no paging).
+                Each tab has a FIXED column (Crew+Route / Fuel & Weights /
+                Files+ATC) instead of a CSS multi-column flow - a flowing
+                layout reshuffles sections between columns as content
+                height changes (e.g. pasting a long ATC flight plan),
+                which makes the screen rearrange itself. A fixed split
+                keeps the layout identical before and after. */}
 
             <div className="compact-grid">
-              {
-                tabs.map((tab) => (
-
-                  <section className={`section compact ${tab.accent}`} key={tab.num}>
-
-                    <div className="section-head">
-                      <div className="section-num">{tab.num}</div>
-                      <h2>{tab.title}</h2>
-                      {tab.kind === "fields" && tab.section.hint ? <span className="hint">{tab.section.hint}</span> : null}
-                      {tab.kind === "atc" ? <span className="hint">Printed verbatim on the final page</span> : null}
-                    </div>
-
-                    <div className="section-body">
-
-                      {
-                        tab.kind === "fields" && tab.section.rows.map((row, index) => (
-                          <div
-                            className={`grid${Math.min(row.cols, row.fields.length)}`}
-                            key={index}
-                          >
-                            {row.fields.map(renderField)}
-                          </div>
-                        ))
-                      }
-
-                      {
-                        tab.kind === "files" && (
-                          <div className="grid1">
-                            <FilePicker name="mainFile" urlName="mainUrl" title="Main Route" required />
-                            <FilePicker name="alternate1File" urlName="alternate1Url" title="Alternate 1" />
-                            <FilePicker name="alternate2File" urlName="alternate2Url" title="Alternate 2" />
-                          </div>
-                        )
-                      }
-
-                      {
-                        tab.kind === "atc" && (
-                          <div className="field">
-                            <label>Full ICAO FPL text</label>
-                            <textarea
-                              name="icaoFlightPlan"
-                              placeholder={"(FPL-VTECG-IN\n-C25A/L-SDFGHRWY/LB1\n-VIDP0945\n-N0411F450 DPN V18 ALI G452 LKN R460 CEA\n..."}
-                              value={form.icaoFlightPlan}
-                              onChange={update}
-                              onInput={autoGrowTextarea}
-                              ref={autoGrowTextarea}
-                              rows={3}
-                              className="grow"
-                            />
-                          </div>
-                        )
-                      }
-
-                    </div>
-
-                  </section>
-
-                ))
-              }
+              <div className="compact-col">
+                {leftTabs.map(renderCompactSection)}
+              </div>
+              <div className="compact-col">
+                {midTabs.map(renderCompactSection)}
+              </div>
+              <div className="compact-col">
+                {rightTabs.map(renderCompactSection)}
+              </div>
             </div>
 
             {/* ---- JSON ---- */}
