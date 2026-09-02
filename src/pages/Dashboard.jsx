@@ -538,6 +538,21 @@ function Dashboard() {
 
   }
 
+  // Grows the ATC textarea to fit its content so the full FPL text is
+  // always visible with no internal scrollbar - works both as a ref
+  // callback (initial mount / value set from outside) and as an
+  // onInput handler (typing/pasting).
+  function autoGrowTextarea(nodeOrEvent) {
+
+    const el = nodeOrEvent && nodeOrEvent.target ? nodeOrEvent.target : nodeOrEvent;
+
+    if (!el) return;
+
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+
+  }
+
 
   // ================= FILE INPUT =================
 
@@ -1306,7 +1321,10 @@ function Dashboard() {
                               placeholder={"(FPL-VTECG-IN\n-C25A/L-SDFGHRWY/LB1\n-VIDP0945\n-N0411F450 DPN V18 ALI G452 LKN R460 CEA\n..."}
                               value={form.icaoFlightPlan}
                               onChange={update}
+                              onInput={autoGrowTextarea}
+                              ref={autoGrowTextarea}
                               rows={3}
+                              className="grow"
                             />
                           </div>
                         )
