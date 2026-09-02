@@ -16,6 +16,7 @@ const PAX_CATEGORY_WEIGHTS = {
 const FORMATS = [
   {
     id: "MLOVE",
+    label: "MLOVE/FAF/KNB",
     key: "ML",
     note: "A4 · OPS flight plan",
     tips: [
@@ -25,6 +26,7 @@ const FORMATS = [
   },
   {
     id: "DEFAULT",
+    label: "DEFAULT 2",
     key: "DF",
     note: "A4 · standard nav log",
     tips: [
@@ -76,6 +78,7 @@ const FORMATS = [
   },
   {
     id: "VTAHP",
+    label: "VTAHB",
     key: "AH",
     note: "Letter · plan time & weight",
     tips: [
@@ -111,6 +114,7 @@ const FORMATS = [
   },
   {
     id: "VTJOE",
+    label: "JOE/TWJ/KVR",
     key: "JO",
     note: "A4 · ATIS & take-off data page",
     tips: [
