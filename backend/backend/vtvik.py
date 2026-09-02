@@ -11,7 +11,6 @@ from common import (
     OUTPUT_DIRECTORY,
     NAV_COLUMNS,
     _cell_line_count,
-    airport_city_name,
     box,
     combined_row_value,
     field,
@@ -141,9 +140,6 @@ def draw_page_one(pdf, data):
 
     dep_code = value(flight.get("departure", ""))
     dest_code = value(flight.get("destination", ""))
-    main_navlog = data.get("mainNavlog", [])
-    dep_city = airport_city_name(dep_code, main_navlog)
-    dest_city = airport_city_name(dest_code, main_navlog, from_end=True)
 
     dist_val = value(time_info.get("plannedRouteDistance"))
     track_val = value(time_info.get("track"))
@@ -153,8 +149,6 @@ def draw_page_one(pdf, data):
     # ---- DEP/DEST + DIST/CRUISE + TRACK/PAX ----
     write(pdf, "DEP", 48.52, 69.40, 25, {"size": 9.4, "lineBreak": False})
     write(pdf, f":{dep_code}", 74.95, 69.40, 45, {"size": 9.4, "lineBreak": False})
-    if dep_city:
-        write(pdf, f"-{dep_city}", 112.98, 69.40, 140, {"size": 9.4, "lineBreak": False})
 
     write(pdf, "DIST", 249.22, 66.06, 25, {"size": 9.4, "lineBreak": False})
     write(pdf, ":", 300.21, 66.06, 8, {"size": 9.4, "lineBreak": False})
@@ -164,8 +158,6 @@ def draw_page_one(pdf, data):
 
     write(pdf, "DEST", 48.52, 83.54, 25, {"size": 9.4, "lineBreak": False})
     write(pdf, f":{dest_code}", 74.95, 83.54, 45, {"size": 9.4, "lineBreak": False})
-    if dest_city:
-        write(pdf, f"-{dest_city}", 112.98, 83.54, 140, {"size": 9.4, "lineBreak": False})
 
     write(pdf, "CRUISE", 249.22, 83.54, 30, {"size": 9.4, "lineBreak": False})
     write(pdf, ":", 300.21, 83.54, 8, {"size": 9.4, "lineBreak": False})
