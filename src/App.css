@@ -114,7 +114,14 @@ a { color: inherit; }
   padding: 0 28px 96px;
 }
 
+.page-tight { max-width: 1560px; }
+
 .page::before { content: none; }
+
+/* Step 2 (details) has no hero above it and needs to fit one screen
+   with no scrolling - the picker's own generous top/bottom padding
+   only made sense with a tall stacked form under it. */
+.page-tight { padding: 10px 28px 10px; }
 
 /* =========================================================
    3. HEADER
@@ -208,31 +215,31 @@ a { color: inherit; }
    ========================================================= */
 
 .hero {
-  padding: 52px 0 36px;
-  margin-bottom: 36px;
+  padding: 10px 0 8px;
+  margin-bottom: 10px;
 }
 
 .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 3px 11px;
   border-radius: var(--r-pill);
   background: var(--blue-tint);
   color: var(--blue-dark);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  margin-bottom: 18px;
+  margin-bottom: 8px;
   animation: rise 0.4s ease both;
 }
 
 .hero h1 {
-  margin: 0 0 12px;
-  font-size: clamp(30px, 4.6vw, 46px);
+  margin: 0 0 6px;
+  font-size: clamp(20px, 2.6vw, 26px);
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
-  max-width: 16ch;
+  max-width: 24ch;
   color: var(--ink);
   animation: rise 0.45s ease both 0.05s;
 }
@@ -243,24 +250,24 @@ a { color: inherit; }
 }
 
 .hero p {
-  max-width: 58ch;
-  font-size: 16px;
-  line-height: 1.6;
+  max-width: 70ch;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: var(--ink-50);
-  margin: 0 0 30px;
+  margin: 0 0 12px;
   animation: rise 0.45s ease both 0.1s;
 }
 
 .hero-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
   animation: rise 0.45s ease both 0.15s;
 }
 
 .stat {
-  padding: 16px 22px;
-  min-width: 120px;
+  padding: 7px 14px;
+  min-width: 90px;
   background: var(--surface);
   border-radius: var(--r-md);
   box-shadow: var(--e1);
@@ -268,7 +275,7 @@ a { color: inherit; }
 
 .stat b {
   display: block;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -276,12 +283,12 @@ a { color: inherit; }
 
 .stat span {
   display: block;
-  font-size: 11.5px;
+  font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--ink-30);
-  margin-top: 3px;
+  margin-top: 1px;
 }
 
 /* =========================================================
@@ -290,13 +297,13 @@ a { color: inherit; }
 
 .picker {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 10px;
 }
 
 .picker-card {
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: var(--surface);
   animation: rise 0.4s ease both;
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
@@ -316,32 +323,32 @@ a { color: inherit; }
 .picker-head {
   width: 100%;
   text-align: left;
-  padding: 20px;
+  padding: 12px 13px;
   background: none;
   border: none;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
 .picker-top {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 9px;
 }
 
 .picker-key {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--r-md);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
   background: var(--surface-2);
   color: var(--ink-70);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .picker-card.is-current .picker-key {
@@ -352,18 +359,22 @@ a { color: inherit; }
 .picker-name {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .picker-name strong {
-  font-size: 15.5px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
 }
 
 .picker-name span {
-  font-size: 12.5px;
+  font-size: 10px;
   color: var(--ink-50);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .picker-tips {
@@ -372,14 +383,14 @@ a { color: inherit; }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 
 .picker-tips li {
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 10.5px;
+  line-height: 1.35;
   color: var(--ink-50);
-  padding-left: 14px;
+  padding-left: 12px;
   position: relative;
 }
 
@@ -387,7 +398,7 @@ a { color: inherit; }
   content: "";
   position: absolute;
   left: 0;
-  top: 7px;
+  top: 6px;
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -398,10 +409,10 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
-  margin-top: 2px;
+  padding-top: 8px;
+  margin-top: 1px;
   border-top: 1px solid var(--line-soft);
-  font-size: 12.5px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--blue);
 }
@@ -472,8 +483,8 @@ a { color: inherit; }
 
 .layout {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -534,6 +545,62 @@ a { color: inherit; }
   flex-direction: column;
   gap: 16px;
 }
+
+/* ---- compact grid (step 2 - every section visible at once, no
+   scrolling) ---- */
+/* A masonry-style multi-column flow rather than a rigid grid, so a tall
+   section (Fuel & Weights) doesn't force blank space next to a short
+   one (Route) the way an equal-row grid would. */
+
+.compact-grid {
+  column-width: 300px;
+  column-count: 3;
+  column-gap: 14px;
+}
+
+.section.compact {
+  break-inside: avoid;
+  margin-bottom: 10px;
+}
+
+.section.compact .section-head {
+  padding: 8px 14px;
+  gap: 8px;
+}
+
+.section.compact .section-num {
+  width: 21px;
+  height: 21px;
+  font-size: 10px;
+}
+
+.section.compact .section-head h2 { font-size: 13px; }
+.section.compact .section-head .hint { font-size: 10px; }
+
+.section.compact .section-body {
+  padding: 10px 14px 12px;
+  gap: 8px;
+}
+
+.section.compact .grid1,
+.section.compact .grid2,
+.section.compact .grid3 { gap: 8px; }
+
+.section.compact .field { gap: 4px; }
+
+.section.compact .field label { font-size: 11px; }
+
+.section.compact .field input,
+.section.compact .field select,
+.section.compact .field textarea {
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+
+.section.compact .file-row { padding: 8px 10px; }
+.section.compact .file-text strong { font-size: 12px; }
+.section.compact .file-text span { font-size: 11px; }
+.section.compact .file-url-row span { font-size: 10.5px; }
 
 /* ---- field grids ---- */
 
@@ -804,7 +871,7 @@ a { color: inherit; }
 .aside {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
   position: sticky;
   top: 88px;
 }
@@ -817,9 +884,9 @@ a { color: inherit; }
 }
 
 .panel-head {
-  padding: 13px 18px;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--line-soft);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -827,29 +894,29 @@ a { color: inherit; }
 }
 
 .panel-body {
-  padding: 18px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
 .chosen {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .format-key {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--r-md);
   background: var(--blue);
   color: #fff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .format-text {
@@ -883,14 +950,14 @@ a { color: inherit; }
 .checklist {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .check-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13.5px;
+  gap: 8px;
+  font-size: 12.5px;
   color: var(--ink-30);
 }
 
@@ -898,12 +965,12 @@ a { color: inherit; }
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 1.5px solid var(--line);
   font-style: normal;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--ink-30);
 }
@@ -1005,7 +1072,7 @@ a { color: inherit; }
 
 .process {
   width: 100%;
-  padding: 13px;
+  padding: 10px;
   border: none;
   border-radius: var(--r-pill);
   background: var(--blue);
@@ -1054,14 +1121,14 @@ a { color: inherit; }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .notes li {
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: var(--ink-50);
-  padding-left: 16px;
+  padding-left: 14px;
   position: relative;
 }
 
@@ -1089,16 +1156,16 @@ a { color: inherit; }
 .result-top {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 18px;
+  gap: 10px;
+  padding: 12px 14px;
 }
 
 .ok-icon {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--green);
   color: #fff;
@@ -1112,8 +1179,8 @@ a { color: inherit; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin: 0 18px 18px;
-  padding: 12px;
+  margin: 0 14px 14px;
+  padding: 10px;
   background: var(--green);
   color: #fff;
   border-radius: var(--r-pill);

@@ -849,6 +849,22 @@ function Dashboard() {
 
   const chosen = FORMATS.find((f) => f.id === form.selectedFormat);
 
+  // One tab per step-2 section - the format-specific ones plus the two
+  // that always show (Files, ATC) - so the wizard's tab bar and the
+  // Prev/Next buttons have a single list to walk, regardless of how many
+  // of the dynamic sections this format actually uses.
+  const tabs = [
+    ...visibleSections.map((section) => ({
+      num: section.num,
+      title: section.title,
+      accent: section.accent,
+      kind: "fields",
+      section,
+    })),
+    { num: "04", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
+    { num: "05", title: "ATC Flight Plan", accent: "c-teal", kind: "atc" },
+  ];
+
   function pickFormat(id) {
     navigate(`/dashboard/${id}`);
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -1073,7 +1089,7 @@ function Dashboard() {
 
       </header>
 
-      <div className="page">
+      <div className="page page-tight">
 
         {/* ================= HERO ================= */}
         {/* Step 2 skips the hero entirely (no eyebrow, heading, blurb, or
@@ -1170,7 +1186,7 @@ function Dashboard() {
                         </div>
 
                         <ul className="picker-tips">
-                          {card.tips.slice(0, 3).map(tip => (
+                          {card.tips.slice(0, 2).map(tip => (
                             <li key={tip}>{tip}</li>
                           ))}
                         </ul>
@@ -1240,87 +1256,69 @@ function Dashboard() {
 
           <main>
 
-            {/* ---- FORMAT-SPECIFIC FIELDS ---- */}
+            {/* ---- ALL SECTIONS AT ONCE, COMPACT GRID ---- */}
+            {/* Every section visible simultaneously (no tabs, no paging)
+                in a multi-column grid so the whole thing is short enough
+                to need no scrolling, the same way regardless of format. */}
 
-            {
-              visibleSections.map(section => (
+            <div className="compact-grid">
+              {
+                tabs.map((tab) => (
 
-                <section className={`section ${section.accent}`} key={section.num}>
+                  <section className={`section compact ${tab.accent}`} key={tab.num}>
 
-                  <div className="section-head">
-                    <div className="section-num">{section.num}</div>
-                    <h2>{section.title}</h2>
-                    {section.hint ? <span className="hint">{section.hint}</span> : null}
-                  </div>
+                    <div className="section-head">
+                      <div className="section-num">{tab.num}</div>
+                      <h2>{tab.title}</h2>
+                      {tab.kind === "fields" && tab.section.hint ? <span className="hint">{tab.section.hint}</span> : null}
+                      {tab.kind === "atc" ? <span className="hint">Printed verbatim on the final page</span> : null}
+                    </div>
 
-                  <div className="section-body">
-                    {
-                      section.rows.map((row, index) => (
-                        <div
-                          className={`grid${Math.min(row.cols, row.fields.length)}`}
-                          key={index}
-                        >
-                          {row.fields.map(renderField)}
-                        </div>
-                      ))
-                    }
-                  </div>
+                    <div className="section-body">
 
-                </section>
+                      {
+                        tab.kind === "fields" && tab.section.rows.map((row, index) => (
+                          <div
+                            className={`grid${Math.min(row.cols, row.fields.length)}`}
+                            key={index}
+                          >
+                            {row.fields.map(renderField)}
+                          </div>
+                        ))
+                      }
 
-              ))
-            }
+                      {
+                        tab.kind === "files" && (
+                          <div className="grid1">
+                            <FilePicker name="mainFile" urlName="mainUrl" title="Main Route" required />
+                            <FilePicker name="alternate1File" urlName="alternate1Url" title="Alternate 1" />
+                            <FilePicker name="alternate2File" urlName="alternate2Url" title="Alternate 2" />
+                          </div>
+                        )
+                      }
 
+                      {
+                        tab.kind === "atc" && (
+                          <div className="field">
+                            <label>Full ICAO FPL text</label>
+                            <textarea
+                              name="icaoFlightPlan"
+                              placeholder={"(FPL-VTECG-IN\n-C25A/L-SDFGHRWY/LB1\n-VIDP0945\n-N0411F450 DPN V18 ALI G452 LKN R460 CEA\n..."}
+                              value={form.icaoFlightPlan}
+                              onChange={update}
+                              rows={3}
+                            />
+                          </div>
+                        )
+                      }
 
-            {/* ---- 4. FILES ---- */}
+                    </div>
 
-            <section className="section c-violet">
+                  </section>
 
-              <div className="section-head">
-                <div className="section-num">04</div>
-                <h2>ForeFlight HTML Exports</h2>
-              </div>
-
-              <div className="section-body">
-
-                <div className="grid1">
-
-                  <FilePicker name="mainFile" urlName="mainUrl" title="Main Route" required />
-                  <FilePicker name="alternate1File" urlName="alternate1Url" title="Alternate 1" />
-                  <FilePicker name="alternate2File" urlName="alternate2Url" title="Alternate 2" />
-
-                </div>
-
-              </div>
-
-            </section>
-
-            {/* ---- 5. ATC FLIGHT PLAN ---- */}
-
-            <section className="section c-teal">
-
-              <div className="section-head">
-                <div className="section-num">05</div>
-                <h2>ATC Flight Plan</h2>
-                <span className="hint">Printed verbatim on the final page</span>
-              </div>
-
-              <div className="section-body">
-
-                <div className="field">
-                  <label>Full ICAO FPL text</label>
-                  <textarea
-                    name="icaoFlightPlan"
-                    placeholder={"(FPL-VTECG-IN\n-C25A/L-SDFGHRWY/LB1\n-VIDP0945\n-N0411F450 DPN V18 ALI G452 LKN R460 CEA\n..."}
-                    value={form.icaoFlightPlan}
-                    onChange={update}
-                    rows={8}
-                  />
-                </div>
-
-              </div>
-
-            </section>
+                ))
+              }
+            </div>
 
             {/* ---- JSON ---- */}
 
@@ -1469,7 +1467,7 @@ function Dashboard() {
                     )
                 }
 
-                <div style={{ height: 16 }} />
+                <div style={{ height: 8 }} />
 
                 <button
                   className="process"
