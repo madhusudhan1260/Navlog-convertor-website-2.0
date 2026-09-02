@@ -121,7 +121,7 @@ a { color: inherit; }
 /* Step 2 (details) has no hero above it and needs to fit one screen
    with no scrolling - the picker's own generous top/bottom padding
    only made sense with a tall stacked form under it. */
-.page-tight { padding: 10px 28px 10px; }
+.page-tight { padding: 8px 28px 6px; }
 
 /* =========================================================
    3. HEADER
@@ -560,7 +560,7 @@ a { color: inherit; }
 
 .section.compact {
   break-inside: avoid;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .section.compact .section-head {
@@ -578,7 +578,7 @@ a { color: inherit; }
 .section.compact .section-head .hint { font-size: 10px; }
 
 .section.compact .section-body {
-  padding: 10px 14px 12px;
+  padding: 10px 14px 10px;
   gap: 8px;
 }
 
@@ -663,6 +663,13 @@ a { color: inherit; }
   font-size: 12.5px;
   resize: vertical;
   min-height: 120px;
+}
+
+/* Auto-grows via JS (autoGrowTextarea) so the full FPL text is always
+   visible - no internal scrollbar, no manual resize handle needed. */
+.field textarea.grow {
+  resize: none;
+  overflow: hidden;
 }
 
 .field input::placeholder,
