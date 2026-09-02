@@ -1100,29 +1100,35 @@ function Dashboard() {
             }
           </p>
 
-          <div className="hero-stats">
+          {
+            step === "format" && (
 
-            <div className="stat">
-              <b><CountUp to={FORMATS.length} /></b>
-              <span>Fleet formats</span>
-            </div>
+              <div className="hero-stats">
 
-            <div className="stat">
-              <b><CountUp to={3} /></b>
-              <span>Routes per plan</span>
-            </div>
+                <div className="stat">
+                  <b><CountUp to={FORMATS.length} /></b>
+                  <span>Fleet formats</span>
+                </div>
 
-            <div className="stat">
-              <b><CountUp to={4} /></b>
-              <span>Pages output</span>
-            </div>
+                <div className="stat">
+                  <b><CountUp to={3} /></b>
+                  <span>Routes per plan</span>
+                </div>
 
-            <div className="stat">
-              <b>A4<span style={{ opacity: 0.55 }}>/</span>LTR</b>
-              <span>Page sizes</span>
-            </div>
+                <div className="stat">
+                  <b><CountUp to={4} /></b>
+                  <span>Pages output</span>
+                </div>
 
-          </div>
+                <div className="stat">
+                  <b>A4<span style={{ opacity: 0.55 }}>/</span>LTR</b>
+                  <span>Page sizes</span>
+                </div>
+
+              </div>
+
+            )
+          }
 
         </div>
 
