@@ -60,6 +60,24 @@ VTCSP_CONTINGENCY_FUEL_MINIMUM = 105
 # trip -> 50, not the natural 5% of 14).
 VTKCM_CONTINGENCY_FUEL_MINIMUM = 50
 
+# Per-TAIL CONTINGENCY fuel floor, keyed by the same registration used for
+# AIRCRAFT_FUEL_LIMITS above (fetched from the ForeFlight export, or typed
+# into the Call Sign field when there's nothing to fetch). Unlike the
+# per-TEMPLATE floors above, this applies in ANY format - the floor
+# follows the tail, not whichever sheet happens to be selected for it.
+# Only ever raises the computed figure ("if it is more, let it be") -
+# never overrides an explicit user_input contingencyFuel value.
+AIRCRAFT_CONTINGENCY_FUEL_MINIMUM = {
+    "VTECG": 67,
+    "VTCSP": 105,
+    "VTAHB": 60,
+    "VTHCA": 100,
+    "VTDOV": 67,
+    "VTAVS": 60,
+    "VTBNB": 60,
+    "VTBBN": 60,
+}
+
 # VTKCM's ADDITIONAL row defaults to a flat 0:15 / 150 lbs unless the
 # operator types their own figure.
 VTKCM_ADDITIONAL_FUEL_DEFAULT = 150
@@ -964,6 +982,19 @@ def convert_with_claude(master_json, template="MLOVE"):
             )
     else:
         _computed_contingency_fuel, _computed_contingency_time = 250, 13
+
+    # Per-tail floor (AIRCRAFT_CONTINGENCY_FUEL_MINIMUM) applies on top of
+    # whichever branch above computed the figure, in every template - it
+    # only ever raises the figure, never lowers it, and never overrides an
+    # explicit user_input/ForeFlight contingencyFuel value (that's applied
+    # separately below, after this).
+    _tail_contingency_minimum = AIRCRAFT_CONTINGENCY_FUEL_MINIMUM.get(_reg_for_limits)
+    if _tail_contingency_minimum is not None:
+        _computed_contingency_fuel = (
+            max(_computed_contingency_fuel, _tail_contingency_minimum)
+            if _computed_contingency_fuel is not None
+            else _tail_contingency_minimum
+        )
 
     page1["fuel"]["contingency"] = first(
         user_input.get("contingencyFuel"),
