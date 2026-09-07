@@ -866,29 +866,39 @@ function Dashboard() {
 
   // One entry per step-2 section - the format-specific ones plus the two
   // that always show (Files, ATC) - rendered all at once in a fixed
-  // two-column layout (see leftTabs/rightTabs below) instead of tabs.
+  // three-column layout (see leftTabs/midTabs/rightTabs below).
+  // visibleSections is always exactly [Crew & Aircraft, Route, Fuel &
+  // Weights] in that order - none of FORM_SECTIONS' 3 sections are ever
+  // hidden wholesale, only individual fields within them.
+  const [crewTab, routeTab, fuelTab] = visibleSections.map((section) => ({
+    num: section.num,
+    title: section.title,
+    accent: section.accent,
+    kind: "fields",
+    section,
+  }));
+
   const tabs = [
-    ...visibleSections.map((section) => ({
-      num: section.num,
-      title: section.title,
-      accent: section.accent,
-      kind: "fields",
-      section,
-    })),
-    { num: "04", title: "ATC Flight Plan", accent: "c-teal", kind: "atc" },
-    { num: "05", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
+    crewTab,
+    routeTab,
+    { num: "03", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
+    { ...fuelTab, num: "04" },
+    { num: "05", title: "ATC Flight Plan", accent: "c-teal", kind: "atc" },
   ];
 
   // Fixed three-column split - always the same sections in the same
   // column regardless of content height, so the layout never reshuffles
   // itself (e.g. pasting a long ATC flight plan used to move sections
   // between columns because the CSS multi-column flow rebalanced).
-  // Fuel & Weights gets its own column because it's consistently the
-  // tallest section across every format - pairing it with anything
-  // else is what pushed the page past one screen.
-  const leftTabs = tabs.filter((tab) => tab.num === "01" || tab.num === "02");
-  const midTabs = tabs.filter((tab) => tab.num === "03");
-  const rightTabs = tabs.filter((tab) => tab.num === "04" || tab.num === "05");
+  // Files sits under Crew & Aircraft/Route rather than beside Fuel &
+  // Weights - Crew+Route alone left a tall empty gap under that column
+  // while Fuel & Weights (consistently the tallest section) still had
+  // to stand alone, so Files fills that gap instead of padding out
+  // whichever column ATC (the one section whose height varies with how
+  // much gets pasted into it) ends up in.
+  const leftTabs = tabs.filter((tab) => ["01", "02", "03"].includes(tab.num));
+  const midTabs = tabs.filter((tab) => tab.num === "04");
+  const rightTabs = tabs.filter((tab) => tab.num === "05");
 
   function renderCompactSection(tab) {
 
