@@ -436,27 +436,29 @@ def draw_page_one(pdf, data):
 # --------------------------------------------------
 # NAVLOG TABLE (PAGES 2+)
 # --------------------------------------------------
-# 15 flat columns (ETA/ATA, ACTUAL FUEL, and AIRWAY dropped - none ever
-# carried a value on this format's own reference, per operator request).
-# The TIME group heads only the LEG column; the column beside it, headed
-# "ETE", carries the remaining-time figure. Widths are the original
-# 18-column set with those columns' width folded back in proportionally,
-# so the table still fills the same frame it always has.
+# 17 flat columns - AIRWAY stays dropped (never carried a value on this
+# format's own reference), but ETA/ATA and ACTUAL FUEL are back per the
+# operator's own reference sheet: both print as blank hand-fill boxes
+# (no data source for either), same as they do there. The TIME group
+# heads only the LEG column; the column beside it, headed "ETE", carries
+# the remaining-time figure. Widths are the original 18-column set's
+# proportions, scaled down just enough to make room for the 2 columns
+# added back, so the table still fills the same frame it always has.
 
 COLUMN_X = [
-    34.8, 137.6, 167.2, 193.7, 229.7, 258.7, 307.1, 330.9, 357.5, 380.1,
-    407.2, 436.9, 471.5, 501.5, 534.4, 560.5,
+    34.8, 119.6, 144.0, 165.9, 195.6, 219.5, 259.4, 279.0, 300.9, 319.5,
+    341.9, 366.4, 394.9, 419.6, 446.7, 468.2, 514.2, 560.2,
 ]
 
 COLUMN_KEYS = [
     "waypoint", "heading", "course", "flightLevel", "windComponent",
     "windDirectionSpeed", "isa", "tas", "gs", "legDistance", "remainingDistance",
-    "fuelUsed", "fuelRemaining", "legTime", "remainingTime",
+    "fuelUsed", "fuelRemaining", "legTime", "remainingTime", "eta", "actualFuel",
 ]
 
 COLUMN_LABELS = [
     "WAYPOINT", "HDG", "CRS", "ALT", "CMP", "DIR/SPD", "ISA", "TAS",
-    "GS", "LEG", "REM", "USED", "REM", "LEG", "ETE",
+    "GS", "LEG", "REM", "USED", "REM", "LEG", "ETE", "ETA/ATA", "ACT FUEL",
 ]
 
 # (label, first column index, last column index) for the shallow top row.
