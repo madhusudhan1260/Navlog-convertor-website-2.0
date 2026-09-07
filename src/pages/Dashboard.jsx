@@ -865,7 +865,7 @@ function Dashboard() {
 
   // One entry per step-2 section - the format-specific ones plus the two
   // that always show (Files, ATC) - rendered all at once in a fixed
-  // three-column layout (see leftTabs/midTabs/rightTabs below).
+  // layout (see leftTabs/midTabs/atcTab/bottomTab below).
   // visibleSections is always exactly [Crew & Aircraft, Route, Fuel &
   // Weights] in that order - none of FORM_SECTIONS' 3 sections are ever
   // hidden wholesale, only individual fields within them.
@@ -885,19 +885,17 @@ function Dashboard() {
     { num: "05", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
   ];
 
-  // Fixed three-column split for the top row, same section in the same
-  // column regardless of content height so the layout never reshuffles
-  // itself (e.g. pasting a long ATC flight plan used to move sections
-  // between columns when this was a CSS multi-column flow instead).
-  // Files runs full-width in its own row below the three columns rather
-  // than narrow inside one of them - its 3 file pickers don't need a
-  // narrow column the way a field grid does, and giving it the full
-  // width lets it lay them out side by side instead of stacked, using
-  // the space that would otherwise sit blank once the three columns
-  // above it (of uneven height) all finish.
+  // Fixed layout, same section in the same spot regardless of content
+  // height so it never reshuffles itself (e.g. pasting a long ATC
+  // flight plan used to move sections between columns when this was a
+  // CSS multi-column flow instead): a two-column top row (Crew &
+  // Aircraft/Route beside Fuel & Weights), then ATC Flight Plan and
+  // Files each running the full width in their own row below it - both
+  // read easier full-width than squeezed into a narrow column, and
+  // Files' 3 file pickers can sit side by side instead of stacked.
   const leftTabs = tabs.filter((tab) => ["01", "02"].includes(tab.num));
   const midTabs = tabs.filter((tab) => tab.num === "03");
-  const rightTabs = tabs.filter((tab) => tab.num === "04");
+  const atcTab = tabs.find((tab) => tab.num === "04");
   const bottomTab = tabs.find((tab) => tab.num === "05");
 
   function renderCompactSection(tab) {
@@ -947,7 +945,7 @@ function Dashboard() {
                   onChange={update}
                   onInput={autoGrowTextarea}
                   ref={autoGrowTextarea}
-                  rows={3}
+                  rows={2}
                   className="grow"
                 />
               </div>
@@ -1355,15 +1353,13 @@ function Dashboard() {
 
             {/* ---- ALL SECTIONS AT ONCE, FIXED LAYOUT ---- */}
             {/* Every section visible simultaneously (no tabs, no paging).
-                Each tab has a FIXED spot (Crew+Route / Fuel & Weights /
-                ATC in three columns, Files full-width underneath) instead
-                of a CSS multi-column flow - a flowing layout reshuffles
-                sections between columns as content height changes (e.g.
-                pasting a long ATC flight plan), which makes the screen
-                rearrange itself. A fixed layout keeps it identical before
-                and after, and Files running full-width fills the space
-                that would otherwise sit blank once the three columns
-                above it (of uneven height) all finish. */}
+                Each tab has a FIXED spot (Crew+Route / Fuel & Weights in
+                two columns, then ATC Flight Plan and Files each full-width
+                underneath) instead of a CSS multi-column flow - a flowing
+                layout reshuffles sections between columns as content
+                height changes (e.g. pasting a long ATC flight plan),
+                which makes the screen rearrange itself. A fixed layout
+                keeps it identical before and after. */}
 
             <div className="compact-grid">
               <div className="compact-col">
@@ -1372,11 +1368,9 @@ function Dashboard() {
               <div className="compact-col">
                 {midTabs.map(renderCompactSection)}
               </div>
-              <div className="compact-col">
-                {rightTabs.map(renderCompactSection)}
-              </div>
             </div>
 
+            {atcTab && renderCompactSection(atcTab)}
             {bottomTab && renderCompactSection(bottomTab)}
 
             {/* ---- JSON ---- */}
