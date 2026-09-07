@@ -637,7 +637,6 @@ a { color: inherit; }
 .section.compact .file-text span { font-size: 11px; }
 .section.compact .file-badge { padding: 2px 8px; font-size: 10px; }
 .section.compact .file-url-row { padding: 0; }
-.section.compact .file-url-row span { font-size: 10.5px; }
 .section.compact .file-url-row input { padding: 3px 7px; font-size: 11.5px; }
 
 /* Files runs full-width as 3 stacked rows (not a narrow 1/3-width
@@ -650,7 +649,7 @@ a { color: inherit; }
   gap: 12px;
 }
 .files-row .file-field { flex: 1; min-width: 0; }
-.files-row .file-url-row { flex: 1; min-width: 0; }
+.files-row .file-url-row { flex: 1.5; min-width: 0; }
 
 /* ---- field grids ---- */
 
@@ -874,12 +873,6 @@ a { color: inherit; }
   align-items: center;
   gap: 8px;
   padding: 0 4px;
-}
-
-.file-url-row span {
-  flex-shrink: 0;
-  font-size: 11.5px;
-  color: var(--ink-50);
 }
 
 .file-url-row input {
