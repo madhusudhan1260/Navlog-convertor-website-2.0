@@ -495,6 +495,19 @@ a { color: inherit; }
   align-items: start;
 }
 
+/* Fills the viewport instead of leaving blank page below a short
+   format's content (e.g. MLOVE, with far fewer visible fields than
+   VTKCM) - the header (66px) plus page-tight's own top/bottom padding
+   (4px + 3px) is what's subtracted here. Spreads the two rows (the
+   three-column grid, then Files) across that full height rather than
+   letting them both cluster at the top. */
+.layout main {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 74px);
+  justify-content: space-between;
+}
+
 /* ---- sections ---- */
 
 .section {
