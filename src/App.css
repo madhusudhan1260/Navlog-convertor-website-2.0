@@ -505,8 +505,14 @@ a { color: inherit; }
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - 74px);
-  justify-content: space-between;
 }
+
+/* Pushes Files (and anything after it) down to the bottom edge while
+   everything above it keeps its normal top-anchored spacing - unlike
+   justify-content: space-between on the container, this doesn't split
+   the leftover space into a gap before EVERY section once there's more
+   than two (the two-column row, then ATC, then Files). */
+.files-section { margin-top: auto; }
 
 /* ---- sections ---- */
 
@@ -629,7 +635,7 @@ a { color: inherit; }
 
 .section.compact .grid1,
 .section.compact .grid2,
-.section.compact .grid3 { gap: 8px; }
+.section.compact .grid3 { gap: 6px; }
 
 .section.compact .field { gap: 3px; }
 
@@ -640,6 +646,15 @@ a { color: inherit; }
 .section.compact .field textarea {
   padding: 6px 8px;
   font-size: 12.5px;
+}
+
+/* ATC Flight Plan runs full-width now, so its textarea reads fine
+   starting shorter than the old 120px min-height - autoGrowTextarea
+   still expands it the moment there's real content to show. */
+.section.compact .field textarea.grow {
+  min-height: 44px;
+  line-height: 1.3;
+  padding: 5px 8px;
 }
 
 /* PAX breakdown (TEST format only) has its own input/select styling
