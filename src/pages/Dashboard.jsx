@@ -818,11 +818,10 @@ function Dashboard() {
         </label>
 
         <div className="file-url-row">
-          <span>or paste a ForeFlight navlog link</span>
           <input
             type="url"
             name={urlName}
-            placeholder="https://..."
+            placeholder="Paste a ForeFlight navlog link"
             value={url}
             disabled={!!chosen}
             onChange={updateUrl}
