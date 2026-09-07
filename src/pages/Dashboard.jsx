@@ -875,8 +875,8 @@ function Dashboard() {
       kind: "fields",
       section,
     })),
-    { num: "04", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
-    { num: "05", title: "ATC Flight Plan", accent: "c-teal", kind: "atc" },
+    { num: "04", title: "ATC Flight Plan", accent: "c-teal", kind: "atc" },
+    { num: "05", title: "ForeFlight HTML Exports", accent: "c-violet", kind: "files" },
   ];
 
   // Fixed three-column split - always the same sections in the same
