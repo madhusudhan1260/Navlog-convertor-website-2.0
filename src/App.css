@@ -495,24 +495,16 @@ a { color: inherit; }
   align-items: start;
 }
 
-/* Fills the viewport instead of leaving blank page below a short
-   format's content (e.g. MLOVE, with far fewer visible fields than
-   VTKCM) - the header (66px) plus page-tight's own top/bottom padding
-   (4px + 3px) is what's subtracted here. Spreads the two rows (the
-   three-column grid, then Files) across that full height rather than
-   letting them both cluster at the top. */
+/* Stretching main to fill tall viewports (min-height + pushing Files
+   down with margin-top: auto) looked fine at the exact height it was
+   tuned against, but on a genuinely tall/wide window it opened a big
+   unexplained gap between ATC Flight Plan and Files instead of the
+   even, natural spacing the reference layout has - removed in favor
+   of plain top-anchored flow, same at every viewport height. */
 .layout main {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 74px);
 }
-
-/* Pushes Files (and anything after it) down to the bottom edge while
-   everything above it keeps its normal top-anchored spacing - unlike
-   justify-content: space-between on the container, this doesn't split
-   the leftover space into a gap before EVERY section once there's more
-   than two (the two-column row, then ATC, then Files). */
-.files-section { margin-top: auto; }
 
 /* ---- sections ---- */
 
