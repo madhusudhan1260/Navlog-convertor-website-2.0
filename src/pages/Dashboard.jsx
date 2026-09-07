@@ -904,7 +904,7 @@ function Dashboard() {
 
     return (
 
-      <section className={`section compact ${tab.accent}`} key={tab.num}>
+      <section className={`section compact ${tab.accent}${tab.kind === "files" ? " files-section" : ""}`} key={tab.num}>
 
         <div className="section-head">
           <div className="section-num">{tab.num}</div>
