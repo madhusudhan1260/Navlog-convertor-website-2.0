@@ -72,6 +72,13 @@
   --c-teal: #0b8043;
   --c-violet: #8430ce;
 
+  /* soft tints of the above, for section-head background washes */
+  --c-indigo-tint: #eaecfa;
+  --c-cyan-tint: #e3f4f4;
+  --c-amber-tint: #fdf0e2;
+  --c-teal-tint: #e5f5ec;
+  --c-violet-tint: #f4e9fb;
+
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 16px;
@@ -525,6 +532,12 @@ a { color: inherit; }
 .section.c-amber  .section-num { background: var(--c-amber); }
 .section.c-teal   .section-num { background: var(--c-teal); }
 .section.c-violet .section-num { background: var(--c-violet); }
+
+.section.c-indigo .section-head { background: var(--c-indigo-tint); }
+.section.c-cyan   .section-head { background: var(--c-cyan-tint); }
+.section.c-amber  .section-head { background: var(--c-amber-tint); }
+.section.c-teal   .section-head { background: var(--c-teal-tint); }
+.section.c-violet .section-head { background: var(--c-violet-tint); }
 
 .section-head h2 {
   margin: 0;
