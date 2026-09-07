@@ -121,7 +121,7 @@ a { color: inherit; }
 /* Step 2 (details) has no hero above it and needs to fit one screen
    with no scrolling - the picker's own generous top/bottom padding
    only made sense with a tall stacked form under it. */
-.page-tight { padding: 6px 28px 4px; }
+.page-tight { padding: 4px 28px 3px; }
 
 /* =========================================================
    3. HEADER
@@ -573,6 +573,15 @@ a { color: inherit; }
   margin-bottom: 8px;
 }
 
+/* Files runs full-width below the three-column row, not inside one of
+   its columns - needs its own top gap since neither side supplies one
+   towards each other the way stacked sections in the same column do. */
+.compact-grid + .section.compact {
+  margin-top: 4px;
+}
+
+.files-row .file-field-group { height: 100%; }
+
 .section.compact .section-head {
   padding: 6px 14px;
   gap: 8px;
@@ -588,7 +597,7 @@ a { color: inherit; }
 .section.compact .section-head .hint { font-size: 10px; }
 
 .section.compact .section-body {
-  padding: 8px 14px 8px;
+  padding: 6px 14px 6px;
   gap: 7px;
 }
 
@@ -607,16 +616,28 @@ a { color: inherit; }
   font-size: 12.5px;
 }
 
-.section.compact .grid1 { gap: 6px; }
-.section.compact .file-field-group { gap: 4px; }
-.section.compact .file-row { padding: 7px 9px; gap: 10px; }
-.section.compact .file-icon { width: 30px; height: 30px; }
+.section.compact .grid1 { gap: 3px; }
+.section.compact .file-field-group { gap: 3px; }
+.section.compact .file-row { padding: 3px 9px; gap: 10px; }
+.section.compact .file-icon { width: 22px; height: 22px; }
 .section.compact .file-text strong { font-size: 12px; }
 .section.compact .file-text span { font-size: 11px; }
-.section.compact .file-badge { padding: 3px 9px; font-size: 10px; }
+.section.compact .file-badge { padding: 2px 8px; font-size: 10px; }
 .section.compact .file-url-row { padding: 0; }
 .section.compact .file-url-row span { font-size: 10.5px; }
-.section.compact .file-url-row input { padding: 5px 8px; font-size: 11.5px; }
+.section.compact .file-url-row input { padding: 3px 7px; font-size: 11.5px; }
+
+/* Files runs full-width as 3 stacked rows (not a narrow 1/3-width
+   column), so each row can afford to be a single compact line - icon,
+   title, status and the paste-link field all inline - instead of the
+   file-row/url-row stacked in two lines. */
+.files-row .file-field-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.files-row .file-field { flex: 1; min-width: 0; }
+.files-row .file-url-row { flex: 1; min-width: 0; }
 
 /* ---- field grids ---- */
 
